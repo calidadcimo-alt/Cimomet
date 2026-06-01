@@ -510,6 +510,28 @@ let db = { ots: [] };
 const SUPA_URL = 'https://hjpdmsdsaufavtxcdvry.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhqcGRtc2RzYXVmYXZ0eGNkdnJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyODM5ODksImV4cCI6MjA5NTg1OTk4OX0.kcVE4CEKPRYjTHKvwGKxS9Y8EAhkLS6FEUMHfgQzmt8';
 const SUPA_ROW = 'cimomet_main';
+let initialSyncDone = false; // becomes true after first cloud pull
+
+// Upload a single OT immediately (more reliable than full-db debounce)
+async function pushOT(ot) {
+  if(!syncEnabled || !ot) return;
+  try {
+    const row = {
+      id: ot.id, num: ot.num, cliente: ot.cliente, obra: ot.obra||'',
+      plano: ot.plano||'', anio: ot.anio||'', estado: ot.estado||'active',
+      items: ot.items||null, custom_items: ot.customItems||[],
+      manual_procs: ot.manualProcs||[], excluded_procs: ot.excludedProcs||[],
+      f07s: ot.f07s||[], f07text: ot.f07text||'',
+      created_at: ot.createdAt ? new Date(ot.createdAt).toISOString() : new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    const r = await fetch(SUPA_URL + '/rest/v1/ots?on_conflict=id', {
+      method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body: JSON.stringify(row)
+    });
+    if(!r.ok) console.error('[pushOT]', r.status, await r.text());
+  } catch(e) { console.error('[pushOT]', e); }
+}
 let syncTimeout = null;
 let syncEnabled = true;
 
@@ -596,6 +618,7 @@ function syncToCloud(delay) {
 async function syncFromCloud() {
   setSyncStatus('syncing','Sincronizando…');
   try {
+    const _wasInitial = !initialSyncDone;
     // Fetch OTs
     const rOts = await fetch(SUPA_URL + '/rest/v1/ots?select=*', {headers: supaHeaders()});
     if(!rOts.ok) throw new Error('ots HTTP ' + rOts.status);
@@ -642,11 +665,13 @@ async function syncFromCloud() {
       });
       try{ localStorage.setItem('cimomet_db', JSON.stringify(db)); }catch(e){}
     }
+    initialSyncDone = true;
     setSyncStatus('ok','Sincronizado');
     setTimeout(() => setSyncStatus('idle'), 2500);
     return true;
   } catch(e) {
     console.warn('Sync from cloud failed:', e);
+    initialSyncDone = true; // allow editing even if cloud unreachable
     setSyncStatus('error','Sin conexión');
     return false;
   }
@@ -1168,7 +1193,11 @@ function renderTabDatos(ot,el){
 function autosaveField(key,val){
   const ot = db.ots.find(o=>o.id===currentOT);
   if(!ot) return;
-  ot[key]=val; saveDB();
+  ot[key]=val;
+  // Save locally + push this OT to cloud immediately
+  try{ const safe=JSON.parse(JSON.stringify(db)); safe.procedures.forEach(p=>{delete p.data;}); localStorage.setItem('cimomet_db',JSON.stringify(safe)); }catch(e){}
+  pushOT(ot);
+  setSyncStatus('ok','Guardado'); setTimeout(()=>setSyncStatus('idle'),2000);
   if(key==='cliente'||key==='estado'){renderSidebar();}
   if(key==='estado'){
     document.querySelectorAll('.badge').forEach(b=>{
