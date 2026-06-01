@@ -553,11 +553,11 @@ function syncToCloud(delay) {
         updated_at: new Date().toISOString()
       }));
       if(otRows.length) {
-        const r = await fetch(SUPA_URL + '/rest/v1/ots', {
+        const r = await fetch(SUPA_URL + '/rest/v1/ots?on_conflict=id', {
           method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
           body: JSON.stringify(otRows)
         });
-        if(!r.ok) throw new Error('ots: HTTP ' + r.status);
+        if(!r.ok) throw new Error('ots ' + r.status + ': ' + (await r.text()).slice(0,80));
       }
       // Upsert all procedures (metadata only)
       const procRows = (db.procedures||[]).map(p => ({
@@ -566,22 +566,22 @@ function syncToCloud(delay) {
         updated_at: new Date().toISOString()
       }));
       if(procRows.length) {
-        const r = await fetch(SUPA_URL + '/rest/v1/procedures', {
+        const r = await fetch(SUPA_URL + '/rest/v1/procedures?on_conflict=id', {
           method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
           body: JSON.stringify(procRows)
         });
-        if(!r.ok) throw new Error('procedures: HTTP ' + r.status);
+        if(!r.ok) throw new Error('procedures ' + r.status + ': ' + (await r.text()).slice(0,80));
       }
       // Upsert library (custom items + custom proc types) as single row
       const libData = {
         customLibrary: db.customLibrary||[],
         customProcTypes: db.customProcTypes||[]
       };
-      const rl = await fetch(SUPA_URL + '/rest/v1/library', {
+      const rl = await fetch(SUPA_URL + '/rest/v1/library?on_conflict=id', {
         method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
         body: JSON.stringify({id:'main', data: libData, updated_at: new Date().toISOString()})
       });
-      if(!rl.ok) throw new Error('library: HTTP ' + rl.status);
+      if(!rl.ok) throw new Error('library ' + rl.status + ': ' + (await rl.text()).slice(0,80));
 
       setSyncStatus('ok','Guardado');
       setTimeout(() => setSyncStatus('idle'), 2500);
