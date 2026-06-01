@@ -1,0 +1,2997 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cimomet · Databook Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#F4F2EE;
+  --surface:#FFFFFF;
+  --surface2:#F9F8F6;
+  --border:#E4E0D8;
+  --border2:#D4CFC6;
+  --text:#1A1816;
+  --text2:#4A4742;
+  --text3:#8C8880;
+  --accent:#1B4F72;
+  --accent2:#2471A3;
+  --accent-light:#EAF2FB;
+  --accent-soft:#D0E6F5;
+  --amber:#9C6A1A;
+  --amber-light:#FDF3E3;
+  --green:#1A6B3C;
+  --green-light:#E6F5EE;
+  --red:#8B2020;
+  --red-light:#FDEAEA;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.08);
+  --shadow:0 2px 8px rgba(0,0,0,.1);
+  --shadow-lg:0 8px 32px rgba(0,0,0,.12);
+  --r:6px;
+  --r2:10px;
+  --r3:14px;
+  --font:'DM Sans',sans-serif;
+  --mono:'DM Mono',monospace;
+}
+
+body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh;overflow:hidden;font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+
+/* ── Layout ────────────────────────────────────────────── */
+.app{display:flex;height:100vh;overflow:hidden}
+
+/* ── Sidebar ────────────────────────────────────────────── */
+.sidebar{
+  width:252px;flex-shrink:0;
+  background:#111C26;
+  display:flex;flex-direction:column;
+  height:100vh;
+  overflow:hidden;
+}
+.sidebar-top{
+  padding:20px 18px 14px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+.brand{
+  font-family:var(--font);font-weight:600;font-size:15px;
+  color:#fff;letter-spacing:.01em;display:flex;align-items:center;gap:8px;
+}
+.brand-icon{
+  width:28px;height:28px;background:var(--accent);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  font-size:13px;font-weight:700;color:#fff;
+}
+.brand-sub{font-size:10px;color:rgba(255,255,255,.4);margin-top:2px;letter-spacing:.04em;text-transform:uppercase}
+.sidebar-label{
+  font-size:9.5px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.1em;color:rgba(255,255,255,.35);
+  padding:14px 18px 5px;
+}
+.sidebar-nav{flex:1;overflow-y:auto;padding-bottom:12px}
+.ot-item{
+  display:flex;align-items:center;gap:9px;
+  padding:8px 18px;cursor:pointer;
+  transition:background .1s;
+  border-left:2px solid transparent;
+  position:relative;
+}
+.ot-item:hover{background:rgba(255,255,255,.06)}
+.ot-item.active{background:rgba(255,255,255,.1);border-left-color:#5BA4CF}
+.ot-num{font-weight:500;font-size:13px;color:#fff;line-height:1.2}
+.ot-meta{font-size:11px;color:rgba(255,255,255,.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+.ot-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.dot-active{background:#52C97A}
+.dot-pending{background:#F5A623}
+.dot-done{background:#5BA4CF}
+
+.btn-new-ot{
+  margin:8px 14px 14px;
+  padding:9px 12px;
+  background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.13);
+  border-radius:var(--r);
+  color:rgba(255,255,255,.8);font-size:12px;font-family:var(--font);font-weight:500;
+  cursor:pointer;transition:all .12s;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.btn-new-ot:hover{background:rgba(255,255,255,.13);color:#fff}
+
+/* Sidebar scrollbar */
+.sidebar-nav::-webkit-scrollbar{width:3px}
+.sidebar-nav::-webkit-scrollbar-track{background:transparent}
+.sidebar-nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:3px}
+
+/* ── Main ───────────────────────────────────────────────── */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg);overflow:hidden;height:100vh}
+
+/* Topbar */
+.topbar{
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  height:52px;
+  position:sticky;top:0;z-index:10;
+  box-shadow:var(--shadow-sm);
+  width:100%;flex-shrink:0;
+}
+.topbar-inner{
+  max-width:1100px;
+  margin:0 auto;
+  padding:0 40px;
+  height:100%;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.topbar-title{font-weight:600;font-size:15px;color:var(--text)}
+.topbar-actions{display:flex;gap:7px}
+
+/* Content */
+.content{flex:1;padding:24px 40px;max-width:1100px;width:100%;margin:0 auto;overflow-y:auto;height:calc(100vh - 52px)}
+
+/* ── Cards ──────────────────────────────────────────────── */
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--r2);
+  padding:18px 20px;
+  margin-bottom:14px;
+  box-shadow:var(--shadow-sm);
+}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.card-title{
+  font-weight:600;font-size:11px;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--text3);
+}
+
+/* ── Fields ─────────────────────────────────────────────── */
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field.full{grid-column:span 2}
+label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)}
+input[type=text],select,textarea{
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:8px 10px;
+  font-size:13px;
+  font-family:var(--font);
+  background:var(--surface);
+  color:var(--text);
+  outline:none;
+  transition:border-color .15s,box-shadow .15s;
+  width:100%;
+}
+input[type=text]:focus,select:focus,textarea:focus{
+  border-color:var(--accent2);
+  box-shadow:0 0 0 3px rgba(36,113,163,.1);
+}
+input::placeholder{color:var(--text3);opacity:.6}
+
+/* ── Status badges ──────────────────────────────────────── */
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 9px;border-radius:20px;
+  font-size:11px;font-weight:600;letter-spacing:.03em;
+}
+.badge-active{background:#E6F9EE;color:#1A6B3C}
+.badge-pending{background:#FEF3E2;color:#9C6A1A}
+.badge-done{background:#E8F4FD;color:#1B4F72}
+
+/* ── Dropzone ───────────────────────────────────────────── */
+.dropzone{
+  border:1.5px dashed var(--border2);
+  border-radius:var(--r2);
+  padding:20px;text-align:center;
+  cursor:pointer;transition:all .15s;
+  background:var(--surface2);
+}
+.dropzone:hover,.dropzone.over{border-color:var(--accent2);background:var(--accent-light)}
+.dropzone.loaded{border-color:var(--green);border-style:solid;background:var(--green-light)}
+.dz-icon{font-size:22px;margin-bottom:6px}
+.dz-text{font-size:12px;color:var(--text3);line-height:1.5}
+
+/* ── Items grid ─────────────────────────────────────────── */
+.items-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.item-row{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 10px;border-radius:var(--r);
+  background:var(--surface2);border:1px solid var(--border);
+  cursor:pointer;transition:all .12s;user-select:none;
+}
+.item-row:hover{border-color:var(--accent2)}
+.item-row.checked{background:var(--accent-light);border-color:var(--accent-soft)}
+.item-row input[type=checkbox]{accent-color:var(--accent2);width:13px;height:13px;flex-shrink:0}
+.item-row span{font-size:12px;line-height:1.3;color:var(--text2)}
+
+/* ── Buttons ────────────────────────────────────────────── */
+.btn{
+  padding:7px 14px;border-radius:var(--r);font-size:12.5px;
+  font-family:var(--font);font-weight:500;
+  cursor:pointer;transition:all .12s;border:1px solid transparent;
+  display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
+}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent2)}
+.btn-secondary{
+  background:var(--surface);color:var(--text2);
+  border-color:var(--border);
+}
+.btn-secondary:hover{background:var(--surface2);border-color:var(--border2)}
+.btn-success{background:var(--green);color:#fff;border-color:var(--green)}
+.btn-success:hover{filter:brightness(1.1)}
+.btn-danger{background:transparent;color:var(--red);border-color:transparent}
+.btn-danger:hover{background:var(--red-light);border-color:var(--red-light)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-lg{padding:10px 20px;font-size:13.5px;border-radius:var(--r2)}
+.btn-sm{padding:4px 10px;font-size:11.5px}
+
+/* Download button */
+.btn-download{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:11px 18px;border-radius:var(--r);
+  background:var(--accent);color:#fff;
+  font-size:13px;font-weight:500;font-family:var(--font);
+  cursor:pointer;text-decoration:none;transition:all .12s;
+  margin-top:6px;
+}
+.btn-download:hover{background:var(--accent2)}
+
+/* ── Progress ───────────────────────────────────────────── */
+.progress{background:var(--border);border-radius:100px;height:3px;overflow:hidden;margin:8px 0;display:none}
+.progress-bar{height:100%;width:0%;background:var(--accent);border-radius:100px;transition:width .3s ease}
+.status-msg{font-size:12px;color:var(--text3);min-height:16px}
+
+/* ── Empty state ────────────────────────────────────────── */
+.empty{text-align:center;padding:56px 20px;color:var(--text3)}
+.empty-icon{font-size:36px;margin-bottom:12px;opacity:.4}
+.empty h3{font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px}
+.empty p{font-size:13px;max-width:280px;margin:0 auto;line-height:1.6}
+
+/* ── OT header ──────────────────────────────────────────── */
+.ot-header{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  margin-bottom:18px;gap:16px;flex-wrap:wrap;
+}
+.ot-header-left h1{font-weight:700;font-size:26px;letter-spacing:-.01em;line-height:1.1}
+.ot-header-left .sub{font-size:12px;color:var(--text3);margin-top:3px;letter-spacing:.01em}
+.ot-actions{display:flex;gap:7px;flex-wrap:wrap}
+
+/* ── Tab strip ──────────────────────────────────────────── */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px}
+.tab{
+  padding:9px 16px;font-size:12.5px;font-weight:500;
+  cursor:pointer;border-bottom:2px solid transparent;
+  color:var(--text3);transition:all .12s;margin-bottom:-1px;
+  white-space:nowrap;
+}
+.tab:hover{color:var(--text2)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ── F07 list ───────────────────────────────────────────── */
+.f07-list{display:flex;flex-direction:column;gap:7px}
+.f07-card{
+  display:flex;align-items:center;gap:11px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--r);padding:9px 13px;
+}
+.f07-icon{font-size:18px;flex-shrink:0}
+.f07-name{font-size:13px;font-weight:500;flex:1;color:var(--text)}
+.f07-meta{font-size:11px;color:var(--text3)}
+
+/* ── Modals ─────────────────────────────────────────────── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.5);
+  display:flex;align-items:center;justify-content:center;
+  z-index:100;padding:20px;
+  backdrop-filter:blur(2px);
+}
+.modal{
+  background:var(--surface);border-radius:var(--r3);
+  padding:24px;width:100%;max-width:520px;
+  box-shadow:var(--shadow-lg);
+  max-height:90vh;overflow-y:auto;
+  border:1px solid var(--border);
+}
+.modal-title{font-weight:700;font-size:17px;margin-bottom:6px;color:var(--text)}
+.modal-footer{
+  display:flex;justify-content:flex-end;gap:8px;
+  margin-top:20px;padding-top:16px;border-top:1px solid var(--border);
+}
+
+/* ── Divider ────────────────────────────────────────────── */
+hr{border:none;border-top:1px solid var(--border);margin:14px 0}
+
+/* ── Chip ───────────────────────────────────────────────── */
+.chip{
+  display:inline-flex;align-items:center;
+  padding:1px 7px;border-radius:20px;
+  font-size:10.5px;font-weight:600;
+  background:var(--border);color:var(--text3);
+}
+
+/* ── Procedures ─────────────────────────────────────────── */
+.proc-card{
+  display:flex;align-items:center;gap:11px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--r);padding:10px 13px;
+  transition:border-color .12s;
+}
+.proc-card:hover{border-color:var(--border2)}
+.proc-icon{font-size:18px;flex-shrink:0}
+.proc-type-badge{
+  display:inline-block;font-size:10px;font-weight:600;
+  padding:2px 7px;border-radius:20px;
+  background:var(--accent-light);color:var(--accent);
+  text-transform:uppercase;letter-spacing:.04em;
+  margin-top:2px;
+}
+.proc-matched{
+  border-color:var(--green)!important;
+  background:var(--green-light)!important;
+}
+.proc-matched .proc-type-badge{background:var(--green);color:#fff}
+
+/* ── Animations ─────────────────────────────────────────── */
+@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.fade-in{animation:fadeIn .18s ease}
+
+/* ── Sidebar procedures section ──────────────────────────── */
+.sidebar-section-btn{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 18px;cursor:pointer;
+  color:rgba(255,255,255,.55);font-size:12.5px;
+  border-left:2px solid transparent;
+  transition:background .1s;
+}
+.sidebar-section-btn:hover{background:rgba(255,255,255,.06);color:rgba(255,255,255,.8)}
+.sidebar-section-btn.active{background:rgba(255,255,255,.1);border-left-color:#5BA4CF;color:#fff}
+
+/* ── Scrollbar (content) ────────────────────────────────── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--text3)}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="brand">CIMOMET <span>SA</span></div>
+      <div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:2px">Gestión de Databooks · v25-sync</div>
+    </div>
+    <div class="sidebar-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:16px">
+      <span>Órdenes de Trabajo</span>
+    </div>
+    <div id="ot-list-sidebar"></div>
+    <div style="border-top:1px solid rgba(255,255,255,.1);margin-top:4px;padding:8px 0 0">
+      <div class="sidebar-label" style="padding:8px 20px 6px">Procedimientos</div>
+      <div class="ot-item" id="sidebar-proc-end" onclick="showProceduresView('END')"
+           style="padding:8px 20px;border-radius:0;border-left:3px solid transparent">
+        <svg width="13" height="13" fill="rgba(255,255,255,.5)" viewBox="0 0 24 24" style="flex-shrink:0">
+          <path d="M19.5 12c0-1.93-1.57-3.5-3.5-3.5S12.5 10.07 12.5 12s1.57 3.5 3.5 3.5 3.5-1.57 3.5-3.5zm-10 0c0-1.93-1.57-3.5-3.5-3.5S2.5 10.07 2.5 12s1.57 3.5 3.5 3.5 3.5-1.57 3.5-3.5zM12 1C5.93 1 1 5.93 1 12s4.93 11 11 11 11-4.93 11-11S18.07 1 12 1zm0 20c-4.96 0-9-4.04-9-9s4.04-9 9-9 9 4.04 9 9-4.04 9-9 9z"/>
+        </svg>
+        <div style="min-width:0">
+          <div class="ot-num">END</div>
+          <div class="ot-meta" id="sidebar-count-end">Ensayos no destructivos</div>
+        </div>
+      </div>
+      <div class="ot-item" id="sidebar-proc-sup" onclick="showProceduresView('Tratamiento Superficial')"
+           style="padding:8px 20px;border-radius:0;border-left:3px solid transparent">
+        <svg width="13" height="13" fill="rgba(255,255,255,.5)" viewBox="0 0 24 24" style="flex-shrink:0">
+          <path d="M18 4V3c0-.55-.45-1-1-1H5c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1h12c.55 0 1-.45 1-1V6h1v4H9v11c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-9h8V4h-3z"/>
+        </svg>
+        <div style="min-width:0">
+          <div class="ot-num">Tratamiento Superficial</div>
+          <div class="ot-meta" id="sidebar-count-sup">Pintura y tratamientos</div>
+        </div>
+      </div>
+      <div class="ot-item" id="sidebar-proc-wps" onclick="showProceduresView('WPS y PQR')"
+           style="padding:8px 20px;border-radius:0;border-left:3px solid transparent">
+        <svg width="13" height="13" fill="rgba(255,255,255,.5)" viewBox="0 0 24 24" style="flex-shrink:0">
+          <path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7"/>
+        </svg>
+        <div style="min-width:0">
+          <div class="ot-num">WPS y PQR</div>
+          <div class="ot-meta" id="sidebar-count-wps">Soldadura</div>
+        </div>
+      </div>
+    </div>
+    <button class="btn-new-ot" onclick="openNewOTModal()">
+      <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      Nueva OT
+    </button>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Panel de OTs</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span id="sync-status" style="font-size:11px;font-family:var(--mono);transition:color .2s;white-space:nowrap"></span>
+        <div class="topbar-actions" id="topbar-actions"></div>
+      </div>
+    </div>
+    <div class="content" id="main-content">
+      <div class="empty fade-in">
+        <div class="empty-icon">📋</div>
+        <h3>Seleccioná o creá una OT</h3>
+        <p>Cada OT guarda sus propios F-07, datos e ítems del databook.</p>
+        <br>
+        <button class="btn btn-primary" onclick="openNewOTModal()">+ Nueva OT</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nueva OT -->
+<div class="modal-overlay" id="modal-new-ot" style="display:none" onclick="closeModalIf(event,'modal-new-ot')">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:480px">
+    <div class="modal-title">Nueva Orden de Trabajo</div>
+    <p style="font-size:13px;color:var(--text3);margin-bottom:16px">
+      Arrastrá el F-07 para crear la OT con todos los datos completados automáticamente.<br>
+      O ingresá el número de OT para empezar y cargar el F-07 después.
+    </p>
+
+    <!-- Drop zone F-07 -->
+    <div class="dropzone" id="new-ot-dz" style="margin-bottom:14px"
+      onclick="document.getElementById('new-ot-file').click()"
+      ondragover="dzOver(event,'new-ot-dz')" ondragleave="dzLeave('new-ot-dz')"
+      ondrop="newOTdzDrop(event)">
+      <div class="dz-icon" id="new-ot-dz-icon">📄</div>
+      <div class="dz-text" id="new-ot-dz-text">
+        Arrastrá el <strong>F-07</strong> acá para autocompletar<br>
+        <small style="color:#C5C0B8">o hacé click para seleccionar (.doc / .docx)</small>
+      </div>
+    </div>
+    <input type="file" id="new-ot-file" accept=".doc,.docx" style="display:none"
+      onchange="newOTloadF07(this.files[0])">
+
+    <div style="display:flex;align-items:center;gap:10px;margin:14px 0">
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <span style="font-size:12px;color:var(--text3)">o completá manualmente</span>
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+
+    <div class="fields">
+      <div class="field"><label>OT N°*</label><input type="text" id="new-ot" placeholder="Ej: 572"></div>
+      <div class="field"><label>Cliente</label><input type="text" id="new-cliente" placeholder="Ej: AESA"></div>
+      <div class="field full"><label>Obra / Equipo</label><input type="text" id="new-obra" placeholder="Se completa desde el F-07"></div>
+      <div class="field"><label>N° Plano</label><input type="text" id="new-plano" placeholder="Ej: 572-PF-01"></div>
+      <div class="field"><label>Año</label><input type="text" id="new-anio" placeholder="2026"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-new-ot')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-create-ot" onclick="createOT()">Crear OT</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Editar OT -->
+<div class="modal-overlay" id="modal-edit-ot" style="display:none" onclick="closeModalIf(event,'modal-edit-ot')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Editar OT</div>
+    <div class="fields">
+      <div class="field"><label>OT N°</label><input type="text" id="edit-ot" disabled></div>
+      <div class="field"><label>Cliente</label><input type="text" id="edit-cliente"></div>
+      <div class="field full"><label>Obra / Equipo</label><input type="text" id="edit-obra"></div>
+      <div class="field"><label>N° Plano</label><input type="text" id="edit-plano"></div>
+      <div class="field"><label>Año</label><input type="text" id="edit-anio"></div>
+      <div class="field full">
+        <label>Estado</label>
+        <select id="edit-estado">
+          <option value="active">En proceso</option>
+          <option value="pending">Pendiente</option>
+          <option value="done">Terminada</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" onclick="deleteCurrentOT()">Eliminar OT</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-secondary" onclick="closeModal('modal-edit-ot')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEditOT()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Template base64 ──────────────────────────────────────────────────────────
+const TEMPLATE_B64 = "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";
+
+// ── State ────────────────────────────────────────────────────────────────────
+let db = { ots: [] };
+
+// ── Supabase cloud sync (raw fetch — no SDK, works with file://) ──────────────
+const SUPA_URL = 'https://hjpdmsdsaufavtxcdvry.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhqcGRtc2RzYXVmYXZ0eGNkdnJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyODM5ODksImV4cCI6MjA5NTg1OTk4OX0.kcVE4CEKPRYjTHKvwGKxS9Y8EAhkLS6FEUMHfgQzmt8';
+const SUPA_ROW = 'cimomet_main';
+let syncTimeout = null;
+let syncEnabled = true;
+
+function supaHeaders(extra) {
+  return Object.assign({
+    'apikey': SUPA_KEY,
+    'Authorization': 'Bearer ' + SUPA_KEY,
+    'Content-Type': 'application/json'
+  }, extra||{});
+}
+
+function setSyncStatus(state, msg) {
+  const el = document.getElementById('sync-status');
+  if(!el) return;
+  const cfg = {
+    idle:    {icon:'', color:'var(--text3)'},
+    syncing: {icon:'⟳', color:'var(--amber)'},
+    ok:      {icon:'✓', color:'var(--green)'},
+    error:   {icon:'⚠', color:'var(--red)'}
+  }[state] || {icon:'', color:'var(--text3)'};
+  el.textContent = (cfg.icon ? cfg.icon + ' ' : '') + (msg||'');
+  el.style.color = cfg.color;
+}
+
+// Push entire db to cloud (debounced)
+function syncToCloud(delay) {
+  console.log('[SYNC] syncToCloud called, enabled:', syncEnabled);
+  if(!syncEnabled) return;
+  clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(async () => {
+    setSyncStatus('syncing','Guardando…');
+    try {
+      // Upsert all OTs (one row each)
+      const otRows = (db.ots||[]).map(ot => ({
+        id: ot.id, num: ot.num, cliente: ot.cliente, obra: ot.obra||'',
+        plano: ot.plano||'', anio: ot.anio||'', estado: ot.estado||'active',
+        items: ot.items||null, custom_items: ot.customItems||[],
+        manual_procs: ot.manualProcs||[], excluded_procs: ot.excludedProcs||[],
+        f07s: ot.f07s||[], f07text: ot.f07text||'',
+        created_at: ot.createdAt ? new Date(ot.createdAt).toISOString() : new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+      if(otRows.length) {
+        const r = await fetch(SUPA_URL + '/rest/v1/ots', {
+          method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+          body: JSON.stringify(otRows)
+        });
+        if(!r.ok) throw new Error('ots: HTTP ' + r.status);
+      }
+      // Upsert all procedures (metadata only)
+      const procRows = (db.procedures||[]).map(p => ({
+        id: p.id, name: p.name, type: p.type, file_type: p.fileType||'',
+        filename: p.filename||'', date: p.date||'', mime_type: p.mimeType||'',
+        updated_at: new Date().toISOString()
+      }));
+      if(procRows.length) {
+        const r = await fetch(SUPA_URL + '/rest/v1/procedures', {
+          method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+          body: JSON.stringify(procRows)
+        });
+        if(!r.ok) throw new Error('procedures: HTTP ' + r.status);
+      }
+      // Upsert library (custom items + custom proc types) as single row
+      const libData = {
+        customLibrary: db.customLibrary||[],
+        customProcTypes: db.customProcTypes||[]
+      };
+      const rl = await fetch(SUPA_URL + '/rest/v1/library', {
+        method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+        body: JSON.stringify({id:'main', data: libData, updated_at: new Date().toISOString()})
+      });
+      if(!rl.ok) throw new Error('library: HTTP ' + rl.status);
+
+      setSyncStatus('ok','Guardado');
+      setTimeout(() => setSyncStatus('idle'), 2500);
+    } catch(e) {
+      console.error('[SYNC ERROR]', e.message, e);
+      setSyncStatus('error', e.message.slice(0,30));
+    }
+  }, delay==null ? 1200 : delay);
+}
+
+// Pull entire db from cloud
+async function syncFromCloud() {
+  setSyncStatus('syncing','Sincronizando…');
+  try {
+    // Fetch OTs
+    const rOts = await fetch(SUPA_URL + '/rest/v1/ots?select=*', {headers: supaHeaders()});
+    if(!rOts.ok) throw new Error('ots HTTP ' + rOts.status);
+    const otRows = await rOts.json();
+
+    // Fetch procedures
+    const rProcs = await fetch(SUPA_URL + '/rest/v1/procedures?select=*', {headers: supaHeaders()});
+    const procRows = rProcs.ok ? await rProcs.json() : [];
+
+    // Fetch library
+    const rLib = await fetch(SUPA_URL + '/rest/v1/library?id=eq.main&select=data', {headers: supaHeaders()});
+    const libRows = rLib.ok ? await rLib.json() : [];
+
+    const cloudHasData = otRows.length > 0;
+    const localEmpty = !db.ots || db.ots.length === 0;
+
+    if(cloudHasData || localEmpty) {
+      // Rebuild db from cloud tables
+      db.ots = otRows.map(r => ({
+        id: r.id, num: r.num, cliente: r.cliente, obra: r.obra,
+        plano: r.plano, anio: r.anio, estado: r.estado,
+        items: r.items, customItems: r.custom_items||[],
+        manualProcs: r.manual_procs||[], excludedProcs: r.excluded_procs||[],
+        f07s: r.f07s||[], f07text: r.f07text||'',
+        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now()
+      }));
+      db.procedures = procRows.map(r => ({
+        id: r.id, name: r.name, type: r.type, fileType: r.file_type,
+        filename: r.filename, date: r.date, mimeType: r.mime_type
+      }));
+      if(libRows.length && libRows[0].data) {
+        db.customLibrary = libRows[0].data.customLibrary || [];
+        db.customProcTypes = libRows[0].data.customProcTypes || [];
+      } else {
+        if(!db.customLibrary) db.customLibrary = [];
+        if(!db.customProcTypes) db.customProcTypes = [];
+      }
+      // Restore custom proc types into PROC_ITEM_MAP
+      (db.customProcTypes||[]).forEach(t => {
+        const name = typeof t==='string' ? t : t.name;
+        const kws = (typeof t==='object' && t.keywords) ? t.keywords
+          : [name.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z0-9 ]/g,'').trim()];
+        if(typeof PROC_ITEM_MAP !== 'undefined') PROC_ITEM_MAP[name] = kws;
+      });
+      try{ localStorage.setItem('cimomet_db', JSON.stringify(db)); }catch(e){}
+    }
+    setSyncStatus('ok','Sincronizado');
+    setTimeout(() => setSyncStatus('idle'), 2500);
+    return true;
+  } catch(e) {
+    console.warn('Sync from cloud failed:', e);
+    setSyncStatus('error','Sin conexión');
+    return false;
+  }
+}
+
+// Upload a file blob to Supabase Storage
+async function supaUploadFile(id, b64, mimeType, filename) {
+  try {
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const blob = new Blob([bytes], {type: mimeType});
+    const ext = (filename||'file').split('.').pop();
+    const path = id + '.' + ext;
+    const r = await fetch(SUPA_URL + '/storage/v1/object/files/' + path, {
+      method: 'POST',
+      headers: {'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Content-Type':mimeType,'x-upsert':'true'},
+      body: blob
+    });
+    return r.ok ? path : null;
+  } catch(e) { return null; }
+}
+
+// Download a file from Supabase Storage → returns base64 record or null
+async function supaDownloadFile(id, filename) {
+  try {
+    const ext = (filename||'file').split('.').pop();
+    const path = id + '.' + ext;
+    const r = await fetch(SUPA_URL + '/storage/v1/object/files/' + path, {
+      headers: {'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}
+    });
+    if(!r.ok) return null;
+    const blob = await r.blob();
+    const ab = await blob.arrayBuffer();
+    const bytes = new Uint8Array(ab);
+    let b64=''; const CHUNK=8192;
+    for(let i=0;i<bytes.length;i+=CHUNK) b64+=String.fromCharCode.apply(null, bytes.subarray(i,i+CHUNK));
+    b64 = btoa(b64);
+    return {id, data:b64, mimeType: blob.type||'application/octet-stream', filename};
+  } catch(e) { return null; }
+}
+
+let currentOT = null;
+let currentTab = 'datos';
+
+const ALL_ITEMS = [
+  "PLAN DE INSPECCION Y ENSAYOS",       // 0
+  "CERTIFICADOS DE MATERIALES",          // 1
+  "WPS Y PQR","WPQ",                     // 2,3
+  "PROCEDIMIENTOS DE END",               // 4  ← procedimiento END
+  "PROCEDIMIENTO DE TRATAMIENTO SUPERFICIAL", // 5  ← procedimiento sup (si aplica)
+  "PROTOCOLO DE CONTROL DIMENSIONAL",   // 6  ← informes END
+  "INFORMES DE LIQUIDOS PENETRANTES",   // 7
+  "INFORME DE GAMMAGRAFIA",             // 8
+  "INFORME DE ULTRASONIDO",             // 9
+  "INFORME DE TRATAMIENTO SUPERFICIAL", // 10 ← informe sup
+  "ACTAS DE INSPECCIÓN",                // 11
+  "ACTAS DE LIBERACION"                 // 12
+];
+// Custom items (pruebas, etc.) inserted between pos 9 and 10 by sortItems
+
+// Custom items are inserted after this standard item
+const CUSTOM_INSERT_AFTER = "INFORME DE ULTRASONIDO";
+
+// Items pre-selected by default in every new OT (can be deselected)
+const DEFAULT_ITEMS = [
+  "PLAN DE INSPECCION Y ENSAYOS",
+  "WPQ",
+  "ACTAS DE INSPECCIÓN",
+  "ACTAS DE LIBERACION"
+];
+
+const ITEM_KW = {
+  "PLAN DE INSPECCION Y ENSAYOS":       ["PLAN DE INSPECCION"],
+  "CERTIFICADOS DE MATERIALES":          ["CERTIFICADO","MILL CERT","CHAPAS","CANOS","PLANCHUELAS"],
+  "WPS Y PQR":                           ["PROC SOLD","PST","PROCEDIMIENTO DE SOLDADURA"],
+  "WPQ":                                 ["WPQ","CALIFICACION DE SOLDADOR"],
+  "PROCEDIMIENTOS DE END":               ["LIQUIDOS PENETRANTE","RADIOGRAFI","ULTRASONIDO","GAMMAGRAF","END"],
+  "PROCEDIMIENTO DE TRATAMIENTO SUPERFICIAL": ["PINTURA","PAINT","GRANALLADO","SHOT BLAST","GALVANIZADO","DECAPADO","PASIVADO"],
+  "PROTOCOLO DE CONTROL DIMENSIONAL":   ["DIMENSIONAL","ISO 13920"],
+  "INFORMES DE LIQUIDOS PENETRANTES":   ["LIQUIDOS PENETRANTE","LP "],
+  "INFORME DE GAMMAGRAFIA":             ["RADIOGRAFI","GAMMAGRAF","ASME VIII","RADIOGRAFIADO"],
+  "INFORME DE ULTRASONIDO":             ["ULTRASONIDO"],
+  "INFORME DE TRATAMIENTO SUPERFICIAL": ["DECAPADO","PASIVADO","TRATAMIENTO SUPERFICIAL","PINTURA"],
+  "ACTAS DE INSPECCIÓN":                ["INSPECCION","INSPECTOR"],
+  "ACTAS DE LIBERACION":                ["LIBERACION","DESPACHO"]
+};
+
+const STATUS_LABELS = {active:'En proceso',pending:'Pendiente',done:'Terminada'};
+const STATUS_BADGE  = {active:'badge-active',pending:'badge-pending',done:'badge-done'};
+const STATUS_DOT    = {active:'dot-active',pending:'dot-pending',done:'dot-done'};
+
+// ── Persistence ──────────────────────────────────────────────────────────────
+// ── IndexedDB for procedure files ────────────────────────────────────────────
+let idb = null;
+function openIDB() {
+  return new Promise((res, rej) => {
+    if(idb) return res(idb);
+    const req = indexedDB.open('cimomet_files', 1);
+    req.onupgradeneeded = e => {
+      e.target.result.createObjectStore('files', {keyPath: 'id'});
+    };
+    req.onsuccess = e => { idb = e.target.result; res(idb); };
+    req.onerror = () => rej(req.error);
+  });
+}
+async function idbSave(id, data, mimeType, filename) {
+  const db2 = await openIDB();
+  await new Promise((res, rej) => {
+    const tx = db2.transaction('files', 'readwrite');
+    tx.objectStore('files').put({id, data, mimeType, filename});
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  });
+  // Upload to cloud in background
+  if(syncEnabled) supaUploadFile(id, data, mimeType, filename).catch(()=>{});
+}
+async function idbGet(id) {
+  // Try local IDB first
+  try {
+    const db2 = await openIDB();
+    const local = await new Promise((res, rej) => {
+      const req = db2.transaction('files','readonly').objectStore('files').get(id);
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+    if(local) return local;
+  } catch(e) {}
+  // Fallback: download from cloud
+  const proc = (db.procedures||[]).find(p=>p.id===id)
+    || (db.ots||[]).flatMap(o=>(o.f07s||[])).find(f=>f.id===id);
+  const filename = (proc && (proc.filename||proc.name)) || (id + '.pdf');
+  const rec = await supaDownloadFile(id, filename);
+  if(rec) {
+    try { 
+      const db3 = await openIDB();
+      db3.transaction('files','readwrite').objectStore('files').put(rec);
+    } catch(e) {}
+    return rec;
+  }
+  return null;
+}
+async function idbDelete(id) {
+  const db2 = await openIDB();
+  return new Promise((res, rej) => {
+    const tx = db2.transaction('files','readwrite');
+    tx.objectStore('files').delete(id);
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  });
+}
+
+function loadDB(){
+  try{ const s=localStorage.getItem('cimomet_db'); if(s) db=JSON.parse(s); }catch(e){}
+  if(!db.customLibrary) db.customLibrary=[];
+  if(!db.procedures) db.procedures=[];
+  // Strip any leftover file data from localStorage (migration)
+  db.procedures.forEach(p => { delete p.data; });
+  if(!db.customProcTypes) db.customProcTypes = [];
+  // (migration removed)
+  // Restore custom types into PROC_ITEM_MAP (supports both old string and new {name,keywords} format)
+  db.customProcTypes.forEach(t => {
+    const name = typeof t === 'string' ? t : t.name;
+    const keywords = typeof t === 'object' && t.keywords
+      ? t.keywords
+      : [name.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z0-9 ]/g,'').trim()];
+    PROC_ITEM_MAP[name] = keywords;
+  });
+}
+function saveDB(){
+  // Never save file data to localStorage
+  const safe = JSON.parse(JSON.stringify(db));
+  safe.procedures.forEach(p => { delete p.data; });
+  try{ localStorage.setItem('cimomet_db', JSON.stringify(safe)); }catch(e){
+    alert('Error al guardar configuración: ' + e.message);
+  }
+}
+
+// ── Sidebar ──────────────────────────────────────────────────────────────────
+// Track which status groups are collapsed in sidebar
+if(!window.sidebarCollapsed) window.sidebarCollapsed = {pending: true, done: true};
+
+function renderSidebar(){
+  const el = document.getElementById('ot-list-sidebar');
+  if(!db.ots.length){
+    el.innerHTML = '<div style="padding:12px 20px;font-size:12px;color:rgba(255,255,255,.55);opacity:.7">Sin OTs todavía</div>';
+    return;
+  }
+
+  const STATUS_GROUPS = [
+    { key: 'active',  label: 'En proceso',  dot: 'dot-active'  },
+    { key: 'pending', label: 'Pendiente',   dot: 'dot-pending' },
+    { key: 'done',    label: 'Terminada',   dot: 'dot-done'    },
+  ];
+
+  const grouped = {};
+  STATUS_GROUPS.forEach(g => grouped[g.key] = []);
+  db.ots.forEach(ot => {
+    const key = ot.estado || 'active';
+    if(!grouped[key]) grouped[key] = [];
+    grouped[key].push(ot);
+  });
+
+  el.innerHTML = STATUS_GROUPS.map(g => {
+    const ots = grouped[g.key];
+    if(!ots.length) return '';
+    const collapsed = window.sidebarCollapsed[g.key];
+    return `
+      <div>
+        <div onclick="toggleSidebarGroup('${g.key}')"
+          style="display:flex;align-items:center;justify-content:space-between;
+            padding:6px 20px 6px 16px;cursor:pointer;user-select:none;
+            color:rgba(255,255,255,.55);font-size:11px;font-weight:700;text-transform:uppercase;
+            letter-spacing:.06em;opacity:.85;
+            border-left:3px solid transparent">
+          <div style="display:flex;align-items:center;gap:7px">
+            <div class="ot-dot ${g.dot}" style="flex-shrink:0"></div>
+            ${g.label}
+            <span style="background:rgba(255,255,255,.15);border-radius:10px;
+              padding:1px 7px;font-size:10px;font-weight:400;letter-spacing:0">
+              ${ots.length}
+            </span>
+          </div>
+          <svg width="11" height="11" fill="rgba(255,255,255,.5)" viewBox="0 0 24 24"
+            style="transition:transform .2s;transform:rotate(${collapsed?'0':'-180'}deg);flex-shrink:0">
+            <path d="M7 10l5 5 5-5z"/>
+          </svg>
+        </div>
+        ${collapsed ? '' : ots.map(ot => `
+          <div class="ot-item ${currentOT===ot.id?'active':''}"
+            onclick="selectOT('${ot.id}')"
+            style="padding-left:28px">
+            <div style="min-width:0">
+              <div class="ot-num">OT ${ot.num}</div>
+              <div class="ot-meta">${ot.cliente||'Sin cliente'}</div>
+            </div>
+          </div>`).join('')}
+      </div>`;
+  }).join('');
+}
+
+function toggleSidebarGroup(key) {
+  window.sidebarCollapsed[key] = !window.sidebarCollapsed[key];
+  renderSidebar();
+}
+
+// ── OT CRUD ──────────────────────────────────────────────────────────────────
+function openNewOTModal(){
+  ['new-ot','new-cliente','new-obra','new-plano'].forEach(id=>{
+    document.getElementById(id).value='';
+  });
+  document.getElementById('new-anio').value=new Date().getFullYear();
+  // Reset dropzone
+  document.getElementById('new-ot-dz').className='dropzone';
+  document.getElementById('new-ot-dz-icon').textContent='📄';
+  document.getElementById('new-ot-dz-text').innerHTML='Arrastrá el <strong>F-07</strong> acá para autocompletar<br><small style="color:#C5C0B8">o hacé click para seleccionar (.doc / .docx)</small>';
+  document.getElementById('modal-new-ot').style.display='flex';
+  // Don't auto-focus OT field — user may drop file first
+}
+
+async function newOTloadF07(file){
+  if(!file) return;
+  const dz=document.getElementById('new-ot-dz');
+  const dzIcon=document.getElementById('new-ot-dz-icon');
+  const dzText=document.getElementById('new-ot-dz-text');
+  dzIcon.textContent='⏳';
+  dzText.innerHTML='Leyendo <strong>'+file.name+'</strong>...';
+  try{
+    const arrayBuffer=await file.arrayBuffer();
+    const bytes2=new Uint8Array(arrayBuffer);
+    const isOLE2=bytes2[0]===0xD0&&bytes2[1]===0xCF&&bytes2[2]===0x11&&bytes2[3]===0xE0;
+    let text='';
+    if(isOLE2||file.name.toLowerCase().endsWith('.doc')&&!file.name.toLowerCase().endsWith('.docx')){
+      let run2=[];
+      for(let i=0;i<bytes2.length;i++){
+        const b=bytes2[i];
+        if(b>=32&&b<=126){run2.push(String.fromCharCode(b));}
+        else{if(run2.length>=5)text+=run2.join('')+' ';run2=[];}
+      }
+      try{
+        const u16b=new Uint16Array(arrayBuffer);
+        let ur=[];
+        for(let i=0;i<u16b.length;i++){
+          const c=u16b[i];
+          if((c>=32&&c<=126)||(c>=160&&c<=255)){ur.push(String.fromCharCode(c));}
+          else{if(ur.length>=5)text+=' '+ur.join('');ur=[];}
+        }
+      }catch(e){}
+    } else {
+      const zip=await JSZip.loadAsync(arrayBuffer);
+      for(const fname of ['word/document.xml','word/header1.xml','word/footer1.xml']){
+        const f=zip.file(fname);
+        if(f){
+          const xml=await f.async('string');
+          const re=/<w:t[^>]*>([^<]*)<\/w:t>/g;
+          let m;while((m=re.exec(xml))!==null) text+=m[1]+' ';
+        }
+      }
+    }
+    // Extract fields and fill form
+    let m;
+    m=text.match(/OT\b[\s]*(?:N[°º])?[\s]*(\d+)/i);
+    if(m) document.getElementById('new-ot').value=m[1];
+
+    m=text.match(/CLIENTE[:\s]+([A-Z][A-Za-z\s.&]{1,30}?)(?=\s{2,}|\bOT\b|\bOBRA\b|\bPLANO\b|\bEQUIPO\b|\d)/i);
+    if(m) document.getElementById('new-cliente').value=m[1].trim().replace(/\.$/,'').toUpperCase();
+
+    m=text.match(/EQUIPO[:\s]+N[°º]\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s]+?)(?=\s+(?:\d[A-Za-z]|[A-Z]{2,}\d|\d{3,}|Plano|OFERTA|CIMOMET|N°))/i);
+    if(!m) m=text.match(/EQUIPO[:\s]+(?:N[°º][\s\d]*)([A-ZÁÉÍÓÚÑ][^\n]{3,60?})(?=\s+(?:Plano|OFERTA|OT|CLIENTE|HOJA))/i);
+    if(m) document.getElementById('new-obra').value=m[1].trim().replace(/\s+/g,' ').toUpperCase();
+
+    m=text.match(/[Pp]lano[:\s]+N[°º]\s*([\w\d][\w\d\-\.]+)/i);
+    if(m) document.getElementById('new-plano').value=m[1].trim();
+
+    const years4=(text.match(/\b(20\d{2})\b/g)||[]);
+    const years2=(text.match(/\d{1,2}[\/\-]\d{1,2}[\/\-](\d{2})\b/g)||[]).map(d=>'20'+d.split(/[\/\-]/).pop());
+    const allYears=[...years4,...years2].filter(y=>y>='2020'&&y<='2035');
+    if(allYears.length) document.getElementById('new-anio').value=allYears.sort().pop();
+
+    // Store file for later processing after OT is created
+    window._pendingF07={file,text,arrayBuffer};
+
+    dz.classList.add('loaded');
+    dzIcon.textContent='✅';
+    dzText.innerHTML='<strong>'+file.name+'</strong><br><small style="color:var(--green)">Datos extraídos — revisá y creá la OT</small>';
+    document.getElementById('new-ot').focus();
+  }catch(err){
+    dzIcon.textContent='⚠️';
+    dzText.innerHTML='<span style="color:var(--red)">No se pudo leer el archivo</span>';
+    console.error(err);
+  }
+}
+
+function newOTdzDrop(e){
+  e.preventDefault();
+  dzLeave('new-ot-dz');
+  const f=e.dataTransfer.files[0];
+  if(f) newOTloadF07(f);
+}
+
+function createOT(){
+  const num = document.getElementById('new-ot').value.trim();
+  if(!num){ alert('Ingresá el número de OT.'); return; }
+  if(db.ots.find(o=>o.num===num)){ alert('Ya existe una OT con ese número.'); return; }
+  const ot = {
+    id:'ot_'+Date.now(),
+    num,
+    cliente: document.getElementById('new-cliente').value.trim().toUpperCase(),
+    obra:    document.getElementById('new-obra').value.trim().toUpperCase(),
+    plano:   document.getElementById('new-plano').value.trim(),
+    anio:    document.getElementById('new-anio').value.trim() || String(new Date().getFullYear()),
+    estado:  'active',
+    items:   undefined,   // set by F-07; undefined = no auto-match for procedures
+    f07s:    [],
+    createdAt: new Date().toISOString()
+  };
+  db.ots.unshift(ot);
+  saveDB();
+  closeModal('modal-new-ot');
+  renderSidebar();
+  currentOT = ot.id;
+  currentTab = 'datos';
+  renderOT();
+  // If F07 was dropped in the modal, process it now
+  if(window._pendingF07){
+    const {file,text,arrayBuffer:f07ab}=window._pendingF07;
+    window._pendingF07=null;
+    setTimeout(()=>{
+      if(f07ab) window._lastF07ArrayBuffer=f07ab;
+      processF07(text, file.name);
+    },300);
+  }
+}
+
+function selectOT(id){
+  currentOT = id;
+  currentTab = 'datos';
+  renderSidebar();
+  renderOT();
+}
+
+function confirmDeleteOT(){
+  const ot = db.ots.find(o=>o.id===currentOT);
+  if(!ot) return;
+  if(!confirm(`¿Eliminar la OT ${ot.num} – ${ot.cliente}?\nEsta acción no se puede deshacer.`)) return;
+  // Delete F07 files from IDB
+  (ot.f07s||[]).forEach(f => { if(f.id) idbDelete(f.id).catch(()=>{}); });
+  // Delete from cloud
+  const otId = currentOT;
+  if(syncEnabled) {
+    fetch(SUPA_URL + '/rest/v1/ots?id=eq.' + otId, {method:'DELETE', headers: supaHeaders()}).catch(()=>{});
+  }
+  // Delete from db
+  db.ots = db.ots.filter(o=>o.id!==currentOT);
+  currentOT = null;
+  saveDB();
+  renderSidebar();
+  // Show empty state
+  document.getElementById('topbar-title').textContent='Panel de OTs';
+  document.getElementById('topbar-actions').innerHTML='';
+  document.getElementById('main-content').innerHTML=`
+    <div class="empty fade-in">
+      <div class="empty-icon">📋</div>
+      <h3>Seleccioná o creá una OT</h3>
+      <p>Cada OT guarda sus propios F-07, datos e ítems del databook.</p>
+    </div>`;
+}
+
+function openEditModal(){
+  const ot = db.ots.find(o=>o.id===currentOT);
+  if(!ot) return;
+  document.getElementById('edit-ot').value=ot.num;
+  document.getElementById('edit-cliente').value=ot.cliente;
+  document.getElementById('edit-obra').value=ot.obra||'';
+  document.getElementById('edit-plano').value=ot.plano||'';
+  document.getElementById('edit-anio').value=ot.anio||'';
+  document.getElementById('edit-estado').value=ot.estado||'active';
+  document.getElementById('modal-edit-ot').style.display='flex';
+}
+
+function saveEditOT(){
+  const ot = db.ots.find(o=>o.id===currentOT);
+  if(!ot) return;
+  ot.cliente = document.getElementById('edit-cliente').value.trim().toUpperCase();
+  ot.obra    = document.getElementById('edit-obra').value.trim().toUpperCase();
+  ot.plano   = document.getElementById('edit-plano').value.trim();
+  ot.anio    = document.getElementById('edit-anio').value.trim();
+  ot.estado  = document.getElementById('edit-estado').value;
+  saveDB(); closeModal('modal-edit-ot');
+  renderSidebar(); renderOT();
+}
+
+function deleteCurrentOT(){
+  const ot = db.ots.find(o=>o.id===currentOT);
+  if(!ot) return;
+  if(!confirm(`¿Eliminar OT ${ot.num}? Esta acción no se puede deshacer.`)) return;
+  db.ots = db.ots.filter(o=>o.id!==currentOT);
+  saveDB(); closeModal('modal-edit-ot');
+  currentOT=null;
+  renderSidebar();
+  document.getElementById('topbar-title').textContent='Panel de OTs';
+  document.getElementById('topbar-actions').innerHTML='';
+  document.getElementById('main-content').innerHTML=`
+    <div class="empty fade-in">
+      <div class="empty-icon">📋</div>
+      <h3>Seleccioná o creá una OT</h3>
+      <p>Cada OT guarda sus propios F-07, datos e ítems del databook.</p>
+      <br><button class="btn btn-primary" onclick="openNewOTModal()">+ Nueva OT</button>
+    </div>`;
+}
+
+// ── Render OT ────────────────────────────────────────────────────────────────
+function renderOT(){
+  const ot = db.ots.find(o=>o.id===currentOT);
+  if(!ot) return;
+  document.getElementById('topbar-title').textContent=`OT ${ot.num} · ${ot.cliente}`;
+  document.getElementById('topbar-actions').innerHTML=`
+    <button class="btn btn-secondary btn-sm" onclick="openEditModal()">✏️ Editar OT</button>
+    <button class="btn btn-secondary btn-sm" style="color:var(--red);border-color:var(--red-light)"
+      onclick="confirmDeleteOT()">🗑 Eliminar</button>
+    <button class="btn btn-primary btn-sm" onclick="switchTab('generar')">⬇ Generar carátulas</button>`;
+
+  const tabs = ['datos','f07','items','procedimientos','generar'];
+  const tabLabels = {datos:'Datos',f07:'F-07',items:'Ítems del databook',procedimientos:'Procedimientos',generar:'Generar'};
+
+  document.getElementById('main-content').innerHTML=`
+    <div class="fade-in">
+      <div class="ot-header">
+        <div class="ot-header-left">
+          <h1>OT ${ot.num}</h1>
+          <div class="sub">${ot.cliente}${ot.obra?' · '+ot.obra:''}</div>
+        </div>
+        <span class="badge ${STATUS_BADGE[ot.estado||'active']}">${STATUS_LABELS[ot.estado||'active']}</span>
+      </div>
+      <div class="tabs">
+        ${tabs.map(t=>`<div class="tab ${currentTab===t?'active':''}" onclick="switchTab('${t}')">${tabLabels[t]}</div>`).join('')}
+      </div>
+      <div id="tab-content"></div>
+    </div>`;
+  renderTab();
+}
+
+function switchTab(t){ currentTab=t; renderTab(); 
+  document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('active',el.textContent.trim()===({datos:'Datos',f07:'F-07',items:'Ítems del databook',generar:'Generar'}[t])));
+}
+
+function renderTab(){
+  const ot = db.ots.find(o=>o.id===currentOT);
+  const el = document.getElementById('tab-content');
+  if(!el||!ot) return;
+  if(currentTab==='datos') renderTabDatos(ot,el);
+  else if(currentTab==='f07') renderTabF07(ot,el);
+  else if(currentTab==='items') renderTabItems(ot,el);
+  else if(currentTab==='procedimientos') renderTabProcedimientos(ot,el);
+  else if(currentTab==='generar') renderTabGenerar(ot,el);
+}
+
+// ── Tab: Datos ───────────────────────────────────────────────────────────────
+function renderTabDatos(ot,el){
+  el.innerHTML=`
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Información del proyecto</span>
+      </div>
+      <div class="fields">
+        <div class="field"><label>OT N°</label><input type="text" id="d-num" value="${esc(ot.num)}" disabled></div>
+        <div class="field"><label>Cliente</label><input type="text" id="d-cliente" value="${esc(ot.cliente)}" oninput="autosaveField('cliente',this.value.toUpperCase())"></div>
+        <div class="field full"><label>Obra / Equipo</label><input type="text" id="d-obra" value="${esc(ot.obra||'')}" placeholder="Descripción del equipo o estructura" oninput="autosaveField('obra',this.value.toUpperCase())"></div>
+        <div class="field"><label>N° Plano</label><input type="text" id="d-plano" value="${esc(ot.plano||'')}" oninput="autosaveField('plano',this.value)"></div>
+        <div class="field"><label>Año</label><input type="text" id="d-anio" value="${esc(ot.anio||'')}" oninput="autosaveField('anio',this.value)"></div>
+        <div class="field full"><label>Estado</label>
+          <select id="d-estado" onchange="autosaveField('estado',this.value)">
+            <option value="active" ${ot.estado==='active'?'selected':''}>En proceso</option>
+            <option value="pending" ${ot.estado==='pending'?'selected':''}>Pendiente</option>
+            <option value="done" ${ot.estado==='done'?'selected':''}>Terminada</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--text3)">Los cambios se guardan automáticamente.</div>
+    </div>`;
+}
+
+function autosaveField(key,val){
+  const ot = db.ots.find(o=>o.id===currentOT);
+  if(!ot) return;
+  ot[key]=val; saveDB();
+  if(key==='cliente'||key==='estado'){renderSidebar();}
+  if(key==='estado'){
+    document.querySelectorAll('.badge').forEach(b=>{
+      b.className='badge '+STATUS_BADGE[val];
+      b.textContent=STATUS_LABELS[val];
+    });
+  }
+}
+
+// ── Tab: F-07 ────────────────────────────────────────────────────────────────
+function renderTabF07(ot,el){
+  const f07sHTML = ot.f07s && ot.f07s.length ? ot.f07s.map((f,i)=>`
+    <div class="f07-card">
+      <div class="f07-icon">📋</div>
+      <div style="flex:1;min-width:0">
+        <div class="f07-name">${esc(f.name)}</div>
+        <div class="f07-meta">Cargado ${f.date} · ${f.items||0} ítems detectados</div>
+      </div>
+      <div style="display:flex;gap:5px;flex-shrink:0">
+        ${f.id ? `<button class="btn btn-secondary btn-sm" title="Abrir" onclick="openF07('${f.id}','${esc(f.name)}')"
+          style="padding:4px 8px">
+          <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/>
+          </svg>
+        </button>` : ''}
+        <button class="btn btn-danger btn-sm" onclick="removeF07(${i})" style="padding:4px 8px">✕</button>
+      </div>
+    </div>`).join('') : '<div style="font-size:13px;color:var(--text3);padding:8px 0">Sin F-07 cargados todavía.</div>';
+
+  el.innerHTML=`
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Plan de Inspección F-07</span>
+        <span class="chip">${ot.f07s?ot.f07s.length:0} archivo/s</span>
+      </div>
+      <p style="font-size:13px;color:var(--text3);margin-bottom:14px">
+        Al cargar el F-07 se detectan automáticamente los ítems del databook y se completan los datos del proyecto.
+      </p>
+      <div class="dropzone" id="dz-f07" onclick="document.getElementById('f07-file').click()"
+        ondragover="dzOver(event,'dz-f07')" ondragleave="dzLeave('dz-f07')" ondrop="dzDrop(event)">
+        <div class="dz-icon">📂</div>
+        <div class="dz-text">Arrastrá el F-07 acá o hacé click<br><small style="color:#C5C0B8">.doc o .docx</small></div>
+      </div>
+      <input type="file" id="f07-file" accept=".doc,.docx" style="display:none" onchange="loadF07file(this.files[0])">
+      <div class="status-msg" id="f07-status" style="margin-top:8px"></div>
+      <hr>
+      <div class="card-title" style="margin-bottom:10px">Archivos cargados</div>
+      <div class="f07-list">${f07sHTML}</div>
+    </div>`;
+}
+
+function dzOver(e,id){e.preventDefault();document.getElementById(id).classList.add('over')}
+function dzLeave(id){document.getElementById(id).classList.remove('over')}
+function dzDrop(e){
+  e.preventDefault();dzLeave('dz-f07');
+  const f=e.dataTransfer.files[0];if(f)loadF07file(f);
+}
+
+async function loadF07file(file){
+  if(!file) return;
+  const statusEl=document.getElementById('f07-status');
+  statusEl.textContent='Leyendo F-07...';
+  try{
+    const arrayBuffer=await file.arrayBuffer();
+    const bytes=new Uint8Array(arrayBuffer);
+    const isDoc=file.name.toLowerCase().endsWith('.doc')&&!file.name.toLowerCase().endsWith('.docx');
+    // Check OLE magic bytes: D0 CF 11 E0
+    const isOLE=bytes[0]===0xD0&&bytes[1]===0xCF&&bytes[2]===0x11&&bytes[3]===0xE0;
+    let text='';
+
+    if(isDoc||isOLE){
+      // .doc (OLE binary): extract ASCII and UTF-16LE text runs
+      // ASCII runs
+      let run=[];
+      for(let i=0;i<bytes.length;i++){
+        const b=bytes[i];
+        if(b>=32&&b<=126){ run.push(String.fromCharCode(b)); }
+        else{ if(run.length>=5) text+=run.join('')+' '; run=[]; }
+      }
+      if(run.length>=5) text+=run.join('');
+      // UTF-16LE runs (Word stores text in UTF-16)
+      try{
+        const u16=new Uint16Array(arrayBuffer);
+        let urun=[];
+        for(let i=0;i<u16.length;i++){
+          const c=u16[i];
+          if((c>=32&&c<=126)||(c>=160&&c<=255)){
+            urun.push(String.fromCharCode(c));
+          } else {
+            if(urun.length>=5) text+=' '+urun.join('');
+            urun=[];
+          }
+        }
+        if(urun.length>=5) text+=' '+urun.join('');
+      }catch(e){}
+    } else {
+      // .docx (ZIP): use JSZip
+      const zip=await JSZip.loadAsync(arrayBuffer);
+      const xmlFiles=['word/document.xml','word/header1.xml','word/footer1.xml'];
+      for(const fname of xmlFiles){
+        const f=zip.file(fname);
+        if(f){
+          const xml=await f.async('string');
+          const re=/<w:t[^>]*>([^<]*)<\/w:t>/g;
+          let m;
+          while((m=re.exec(xml))!==null) text+=m[1]+' ';
+        }
+      }
+    }
+
+    if(!text.trim()){
+      statusEl.textContent='⚠️ No se pudo leer el contenido del archivo.';
+      return;
+    }
+    window._lastF07ArrayBuffer = arrayBuffer;
+    processF07(text,file.name);
+  }catch(err){
+    statusEl.textContent='Error al leer el archivo: '+err.message;
+    console.error(err);
+  }
+}
+
+function processF07(text,filename){
+  const ot=db.ots.find(o=>o.id===currentOT);
+  if(!ot) return;
+
+  // Extract header data from F-07 — always overwrite with F-07 values
+  let m;
+
+  // OT number — look for OT N°: XX or similar
+  m=text.match(/OT[.\s]*N[°º][\s.:]*([\w\d]+)/i);
+  if(m) ot.num=m[1].replace(/[^\w\d]/g,'');
+
+  // Cliente — appears after "CLIENTE:" label
+  // The F-07 header has: CLIENTE: TERNIUM  (or similar)
+  m=text.match(/CLIENTE[:\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s.&]{1,30}?)(?=\s{2,}|\bOT\b|\bOBRA\b|\bPLANO\b|\bEQUIPO\b|\bHOJA\b|\bOFERTA\b|\b\d)/i);
+  if(m) ot.cliente=m[1].trim().replace(/\.$/,'').toUpperCase();
+
+  // Equipo / Obra — appears right after "EQUIPO: N°" label in F-07 header
+  m=text.match(/EQUIPO[:\s]+N[°º]\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s]+?)(?=\s+(?:\d[A-Za-z]|[A-Z]{2,}\d|\d{3,}|Plano|OFERTA|CIMOMET|N°))/i);
+  if(!m) m=text.match(/EQUIPO[:\s]+(?:N[°º][\s\d]*)([A-ZÁÉÍÓÚÑ][^\n]{3,60?})(?=\s+(?:Plano|OFERTA|OT|CLIENTE|HOJA))/i);
+  if(m) ot.obra=m[1].trim().replace(/\s+/g,' ').toUpperCase();
+
+  // Plano
+  m=text.match(/[Pp]lano[:\s]+(?:N[°º][\s]*)?([\w\d][\w\d\-\.]+)/i);
+  if(m) ot.plano=m[1].trim();
+
+  // Año — extract from 4-digit years OR 2-digit dates like 10/03/26
+  const years4=text.match(/\b(20\d{2})\b/g)||[];
+  const years2=(text.match(/\d{1,2}[\/-]\d{1,2}[\/-](\d{2})\b/g)||[])
+    .map(d=>{ const y=d.split(/[\/\-]/).pop(); return y.length===2?'20'+y:y; });
+  const allYears=[...years4,...years2].filter(y=>y>='2020'&&y<='2035');
+  if(allYears.length) ot.anio=allYears.sort().pop();
+
+  // OFerta técnica (número de oferta — útil para referencia)
+  m=text.match(/OFERTA\s+TECNICA[\s\S]{0,20}?N[°º][\s]*(\d+[-\/\d]*)/i);
+  if(m && !ot.oferta) ot.oferta=m[1].trim();
+
+  // Auto-detect standard items
+  const textUp=text.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const detectedItems=ALL_ITEMS.filter(item=>{
+    const kws=ITEM_KW[item];
+    if(!kws) return true;
+    return kws.some(kw=>textUp.includes(kw.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')));
+  });
+  // Always pre-select default items even if not in F-07
+  const allDetected = [...new Set([...DEFAULT_ITEMS, ...detectedItems])];
+  ot.items=allDetected;
+  sortItems(ot);  // ensure canonical order
+
+  // Auto-detect custom items: scan for PRUEBA/ENSAYO/TEST patterns not covered by standard items
+  const extraPatterns=[
+    /\b\d{1,2}\s+(PRUEBA\s+[A-Z]+(?:\s+[A-Z]+)?)/g,
+    /\b\d{1,2}\s+(ENSAYO\s+[A-Z]+(?:\s+[A-Z]+)?)/g,
+    /\b\d{1,2}\s+(TEST\s+[A-Z]+(?:\s+[A-Z]+)?)/g,
+    /\b\d{1,2}\s+(VERIFICACION\s+[A-Z]+(?:\s+[A-Z]+)?)/g,
+  ];
+  const newCustomItems=new Set();
+  for(const pat of extraPatterns){
+    let em;
+    while((em=pat.exec(textUp))!==null){
+      const candidate=em[1].trim().replace(/\s+/g,' ');
+      // Check not already covered by standard item keywords
+      const alreadyCovered=Object.values(ITEM_KW).some(kws=>
+        kws.some(kw=>candidate.includes(kw.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')))
+      );
+      if(!alreadyCovered) newCustomItems.add('INFORME DE '+candidate);
+    }
+  }
+  if(newCustomItems.size>0){
+    if(!ot.customItems) ot.customItems=[];
+    for(const item of newCustomItems){
+      if(!ot.customItems.includes(item)){
+        ot.customItems.push(item);
+        // Also add to library
+        if(!db.customLibrary) db.customLibrary=[];
+        if(!db.customLibrary.includes(item)) db.customLibrary.push(item);
+      }
+    }
+  }
+
+  // Save F07 reference and raw text for PST matching
+  if(!ot.f07s) ot.f07s=[];
+  const f07id = 'f07_' + ot.id + '_' + Date.now();
+  ot.f07s.push({
+    id: f07id,
+    name:filename,
+    date:new Date().toLocaleDateString('es-AR'),
+    items:detectedItems.length
+  });
+  // Store normalized F-07 text for PST number matching
+  ot.f07text = text.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  // Save file to IndexedDB for later viewing
+  if(window._lastF07ArrayBuffer){
+    const bytes = new Uint8Array(window._lastF07ArrayBuffer);
+    let b64=''; const CHUNK=8192;
+    for(let i=0;i<bytes.length;i+=CHUNK) b64+=String.fromCharCode(...bytes.subarray(i,i+CHUNK));
+    b64=btoa(b64);
+    const mime = filename.toLowerCase().endsWith('.pdf') ? 'application/pdf'
+      : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    idbSave(f07id, b64, mime, filename).catch(e=>console.warn('F07 save:',e));
+    window._lastF07ArrayBuffer = null;
+  }
+
+  saveDB();
+  // Update the data fields in the UI if currently on datos tab
+  ['ot','cliente','obra','plano','anio'].forEach(field=>{
+    const el=document.getElementById('d-'+field);
+    if(el) el.value=ot[field]||'';
+  });
+  const statusEl=document.getElementById('f07-status');
+  statusEl.textContent=`✅ ${detectedItems.length} estándar` + ((ot.customItems||[]).length>0?` + ${(ot.customItems||[]).length} adicionales`:'') + ` detectados.`;
+  // Refresh sidebar, show datos tab first so user sees the loaded fields
+  renderSidebar();
+  setTimeout(()=>{
+    switchTab('datos');   // show filled data fields
+    // Brief flash on items tab label to hint it was also updated
+    setTimeout(()=>{
+      const itemsTab=document.querySelector('.tab:nth-child(3)');
+      if(itemsTab){
+        itemsTab.style.color='var(--accent)';
+        itemsTab.style.fontWeight='600';
+        setTimeout(()=>{itemsTab.style.color='';itemsTab.style.fontWeight='';},2000);
+      }
+    },300);
+  },400);
+}
+
+function removeF07(idx){
+  const ot=db.ots.find(o=>o.id===currentOT);
+  if(!ot||!ot.f07s) return;
+  const f07 = ot.f07s[idx];
+  if(f07 && f07.id) idbDelete(f07.id).catch(()=>{});
+  ot.f07s.splice(idx,1);
+  saveDB(); renderTab();
+}
+
+// ── Tab: Items ───────────────────────────────────────────────────────────────
+function renderTabItems(ot,el){
+  // If items not yet persisted, initialize from defaults and save immediately
+  if(!ot.items){
+    ot.items=[...DEFAULT_ITEMS,...ALL_ITEMS.filter(i=>!DEFAULT_ITEMS.includes(i))];
+    // Actually just use ALL_ITEMS as default — user hasn't customized yet
+    ot.items=[...ALL_ITEMS];
+    saveDB();
+  }
+  const selected=ot.items;
+  const customOT=ot.customItems||[];
+  const library=db.customLibrary||[];
+
+  // Build full item list: standard + custom for this OT
+  const allForOT=[...ALL_ITEMS,...customOT];
+
+  el.innerHTML=`
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Ítems del databook</span>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-secondary btn-sm" onclick="setAllItems(true)">Marcar todos</button>
+          <button class="btn btn-secondary btn-sm" onclick="setAllItems(false)">Desmarcar todos</button>
+        </div>
+      </div>
+      <p style="font-size:13px;color:var(--text3);margin-bottom:12px">
+        ${ot.f07s&&ot.f07s.length?'Detectados desde el F-07. Podés ajustar o agregar ensayos adicionales.':'Seleccioná los ítems o agregá ensayos personalizados.'}
+      </p>
+
+      <div class="card-title" style="margin-bottom:8px">Ítems estándar</div>
+      <div class="items-grid" id="items-grid-container">
+        ${ALL_ITEMS.map((item,i)=>{
+          const isChecked = selected.includes(item);
+          const isDefault = DEFAULT_ITEMS.includes(item);
+          return `<div class="item-row ${isChecked?'checked':''}" id="irow-std-${i}" onclick="toggleStdItem(${i})">
+            <input type="checkbox" id="ichk-std-${i}" ${isChecked?'checked':''}
+              onclick="event.stopPropagation();toggleStdItem(${i})">
+            <span>${item}</span>
+            ${isDefault&&!isChecked?'<span style="font-size:10px;color:var(--text3);margin-left:auto">default</span>':''}
+          </div>`;
+        }).join('')}
+      </div>
+
+      ${customOT.length>0?`
+      <div class="card-title" style="margin-top:16px;margin-bottom:8px">Ensayos y pruebas adicionales <span class="chip">${customOT.length}</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px" id="custom-items-list">
+        ${customOT.map((item,i)=>`
+          <div class="item-row checked" style="justify-content:space-between">
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="checkbox" checked onclick="event.stopPropagation();toggleCustomItem(${i})">
+              <span>${item}</span>
+            </div>
+            <button class="btn btn-danger btn-sm" style="padding:3px 8px;font-size:11px" onclick="removeCustomItem(${i})">✕</button>
+          </div>`).join('')}
+      </div>`:
+      '<div style="margin-top:12px"></div>'}
+
+      <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="openAddCustomModal()">+ Nuevo ensayo / prueba</button>
+        ${library.length>0?`<button class="btn btn-secondary btn-sm" onclick="openLibraryModal()">📚 Desde biblioteca (${library.length})</button>`:''}
+      </div>
+
+      <div style="margin-top:10px;font-size:12px;color:var(--text3)" id="items-count-label">
+        ${selected.length + customOT.length} ítems seleccionados en total
+      </div>
+    </div>`;
+}
+
+
+function toggleStdItem(i){
+  const ot=db.ots.find(o=>o.id===currentOT);
+  if(!ot) return;
+  if(!ot.items) ot.items=[...ALL_ITEMS];
+  const item=ALL_ITEMS[i];
+  const idx=ot.items.indexOf(item);
+  if(idx>=0) ot.items.splice(idx,1); else ot.items.push(item);
+  saveDB();
+  const cb=document.getElementById('ichk-std-'+i);
+  const row=document.getElementById('irow-std-'+i);
+  if(cb) cb.checked=ot.items.includes(item);
+  if(row) row.classList.toggle('checked',ot.items.includes(item));
+  const lbl=document.getElementById('items-count-label');
+  if(lbl){
+    const ot2=db.ots.find(o=>o.id===currentOT);
+    lbl.textContent=`${(ot2.items||[]).length+(ot2.customItems||[]).length} ítems seleccionados en total`;
+  }
+}
+
+function toggleCustomItem(i){
+  // Custom items are always selected when present; remove to deselect
+  removeCustomItem(i);
+}
+
+function removeCustomItem(i){
+  const ot=db.ots.find(o=>o.id===currentOT);
+  if(!ot||!ot.customItems) return;
+  ot.customItems.splice(i,1);
+  saveDB(); renderTab();
+}
+
+function openAddCustomModal(){
+  document.getElementById('modal-custom-item').style.display='flex';
+  document.getElementById('custom-item-input').value='';
+  document.getElementById('custom-item-save-lib').checked=true;
+  setTimeout(()=>document.getElementById('custom-item-input').focus(),50);
+}
+
+function closeAddCustomModal(){
+  document.getElementById('modal-custom-item').style.display='none';
+}
+
+function saveCustomItem(){
+  const name=document.getElementById('custom-item-input').value.trim().toUpperCase();
+  if(!name){alert('Ingresá el nombre del ítem.');return;}
+  const ot=db.ots.find(o=>o.id===currentOT);
+  if(!ot) return;
+  if(!ot.customItems) ot.customItems=[];
+  if(ot.customItems.includes(name)){alert('Este ítem ya está en la lista.');return;}
+  ot.customItems.push(name);
+  // Save to library if checked
+  const saveToLib=document.getElementById('custom-item-save-lib').checked;
+  if(saveToLib){
+    if(!db.customLibrary) db.customLibrary=[];
+    if(!db.customLibrary.includes(name)) db.customLibrary.push(name);
+  }
+  saveDB(); closeAddCustomModal(); renderTab();
+}
+
+function openLibraryModal(){
+  const library=db.customLibrary||[];
+  const ot=db.ots.find(o=>o.id===currentOT);
+  const existing=(ot&&ot.customItems)||[];
+  const list=document.getElementById('library-items-list');
+  list.innerHTML=library.map((item,i)=>`
+    <div class="item-row ${existing.includes(item)?'checked':''}" onclick="toggleLibraryItem(${i})" id="lib-row-${i}">
+      <input type="checkbox" ${existing.includes(item)?'checked':''} onclick="event.stopPropagation();toggleLibraryItem(${i})" id="lib-chk-${i}">
+      <span style="flex:1">${item}</span>
+      <button class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:11px" onclick="event.stopPropagation();deleteFromLibrary(${i})">✕</button>
+    </div>`).join('') || '<div style="font-size:13px;color:var(--text3)">La biblioteca está vacía.</div>';
+  document.getElementById('modal-library').style.display='flex';
+}
+
+function toggleLibraryItem(i){
+  const ot=db.ots.find(o=>o.id===currentOT);
+  if(!ot) return;
+  if(!ot.customItems) ot.customItems=[];
+  const item=db.customLibrary[i];
+  const idx=ot.customItems.indexOf(item);
+  if(idx>=0) ot.customItems.splice(idx,1); else ot.customItems.push(item);
+  saveDB();
+  const cb=document.getElementById('lib-chk-'+i);
+  const row=document.getElementById('lib-row-'+i);
+  if(cb) cb.checked=ot.customItems.includes(item);
+  if(row) row.classList.toggle('checked',ot.customItems.includes(item));
+}
+
+function deleteFromLibrary(i){
+  if(!confirm('¿Eliminar este ítem de la biblioteca?')) return;
+  db.customLibrary.splice(i,1);
+  saveDB(); openLibraryModal();
+}
+
+function closeLibraryModal(){
+  document.getElementById('modal-library').style.display='none';
+  renderTab();
+}
+
+
+function setAllItems(check){
+  const ot=db.ots.find(o=>o.id===currentOT);
+  if(!ot) return;
+  ot.items=check?[...ALL_ITEMS]:[];
+  saveDB(); renderTab();
+}
+
+// ── Tab: Generar ─────────────────────────────────────────────────────────────
+function renderTabGenerar(ot,el){
+  const items=ot.items||[...ALL_ITEMS];
+  el.innerHTML=`
+    <div class="card">
+      <div class="card-header"><span class="card-title">Resumen</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:4px">
+        <div style="background:var(--surface2);border-radius:var(--r);padding:12px 14px">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">OT</div>
+          <div style="font-size:18px;font-family:var(--font);font-weight:700">${esc(ot.num)}</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:var(--r);padding:12px 14px">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Cliente</div>
+          <div style="font-size:16px;font-weight:600">${esc(ot.cliente||'—')}</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:var(--r);padding:12px 14px">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Ítems</div>
+          <div style="font-size:18px;font-family:var(--font);font-weight:700">${items.length}</div>
+        </div>
+      </div>
+      ${ot.obra?`<div style="font-size:13px;color:var(--text3);padding:8px 0">${esc(ot.obra)}</div>`:''}
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Ítems incluidos</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${items.map(it=>`<span class="chip">✓ ${esc(it)}</span>`).join('')}
+        ${items.length===0?'<span style="font-size:13px;color:var(--text3)">Sin ítems seleccionados. Ir a la pestaña "Ítems del databook".</span>':''}
+      </div>
+    </div>
+    <div class="progress" id="gen-progress"><div class="progress-bar" id="gen-pbar"></div></div>
+    <div class="status-msg" id="gen-status"></div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-primary btn-lg" id="btn-gen-now" onclick="generateCaratulas()" ${items.length===0?'disabled':''}>
+        ⬇ Generar carátulas .docx
+      </button>
+    </div>
+    <div id="gen-result" style="display:none;margin-top:12px">
+      <div class="card" style="border-color:var(--green)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-size:24px">✅</div>
+          <div>
+            <div style="font-weight:600">Carátulas generadas</div>
+            <div style="font-size:12px;color:var(--text3)" id="gen-result-desc"></div>
+          </div>
+          <div style="margin-left:auto">
+            <div style="display:flex;gap:8px">
+              <a class="btn btn-success" id="btn-download" href="#" download="" style="flex:1;justify-content:center">
+                <svg width="14" height="14" fill="white" viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zm7-18v10.59l-3.29-3.3-1.42 1.42L12 16l4.71-4.71-1.42-1.42L13 13.17V2h-1z"/></svg>
+                Descargar .docx
+              </a>
+              <button onclick="printGeneratedDoc()" style="padding:10px 14px;background:#185FA5;color:white;border:none;border-radius:var(--r);cursor:pointer;display:flex;align-items:center" title="Imprimir">
+                <svg width="14" height="14" fill="white" viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Fix Word 2007 compatibility: replace OOXML strict names with transitional names
+function fixWord2007(xml){
+  // Alignment values: strict -> transitional
+  xml=xml.replace(/w:val="start"/g,'w:val="left"');
+  xml=xml.replace(/w:val="end"/g,'w:val="right"');
+  // Cell margin elements
+  xml=xml.replace(/<w:start (w:w="[^"]*" w:type="[^"]*")\/>/g,'<w:left $1/>');
+  xml=xml.replace(/<w:end (w:w="[^"]*" w:type="[^"]*")\/>/g,'<w:right $1/>');
+  // w:ind attributes
+  xml=xml.replace(/(<w:ind[^>]*)w:start=/g,'$1w:left=');
+  xml=xml.replace(/(<w:ind[^>]*)w:end=/g,'$1w:right=');
+  // Remove title="" from wp:docPr (Word 2007 doesn't support it)
+  xml=xml.replace(/\s+title="[^"]*"/g,'');
+  // Collapse empty wp:docPr: ...></wp:docPr> -> .../>
+  xml=xml.replace(/(<wp:docPr[^>]*)><\/wp:docPr>/g,'$1/>');
+  // Remove Word 2010+ namespaces and mc:Ignorable
+  xml=xml.replace(/\s+xmlns:w14="[^"]*"/g,'');
+  xml=xml.replace(/\s+xmlns:w15="[^"]*"/g,'');
+  xml=xml.replace(/\s+xmlns:wp14="[^"]*"/g,'');
+  xml=xml.replace(/\s+xmlns:mc="[^"]*"/g,'');
+  xml=xml.replace(/\s+mc:Ignorable="[^"]*"/g,'');
+  return xml;
+}
+
+async function generateCaratulas(){
+  const ot=db.ots.find(o=>o.id===currentOT);
+  if(!ot) return;
+  if(currentTab!=='generar'){switchTab('generar');setTimeout(()=>generateCaratulas(),200);return;}
+  const items=ot.items||[...ALL_ITEMS];
+  if(!items.length){alert('Seleccioná al menos un ítem.');return;}
+
+  const btn=document.getElementById('btn-gen-now');
+  const prog=document.getElementById('gen-progress');
+  const pbar=document.getElementById('gen-pbar');
+  const status=document.getElementById('gen-status');
+  const result=document.getElementById('gen-result');
+
+  if(btn) btn.disabled=true;
+  if(result) result.style.display='none';
+  if(prog) prog.style.display='block';
+  if(status) status.textContent='Leyendo plantilla...';
+  if(pbar) pbar.style.width='15%';
+
+  try{
+    // Load template with JSZip
+    const templateBytes = b64ToBytes(TEMPLATE_B64);
+    if(pbar) pbar.style.width='30%';
+    if(status) status.textContent='Procesando ZIP...';
+
+    const zip = await JSZip.loadAsync(templateBytes);
+
+    if(pbar) pbar.style.width='50%';
+    if(status) status.textContent='Editando XML...';
+
+    // Edit header1.xml
+    const hdrFile = zip.file('word/header1.xml');
+    if(hdrFile){
+      let h = await hdrFile.async('string');
+      h = h.replace(/>OT\. N°: [^<]+</g, `>OT. N°: ${escXml(ot.num||'XX')}<`);
+      // Replace cliente - handle various patterns
+      h = h.replace(/(<w:t[^>]*> )(AESA|TERNIUM|[A-Z]+)\.<\/w:t>/g, `$1${escXml(ot.cliente||'CLIENTE')}.</w:t>`);
+      // Replace obra - the last bold text run in header
+      h = h.replace(/<w:t>(Estructuras[^<]*|CAMPANAS[^<]*)<\/w:t>/g, `<w:t>${escXml(ot.obra||'OBRA')}.</w:t>`);
+      zip.file('word/header1.xml', fixWord2007(h));
+    }
+
+    // Edit footer1.xml (year)
+    const ftrFile = zip.file('word/footer1.xml');
+    if(ftrFile){
+      let f = await ftrFile.async('string');
+      f = f.replace(/AÑO \d{4}/g, `AÑO ${escXml(ot.anio||String(new Date().getFullYear()))}`);
+      zip.file('word/footer1.xml', fixWord2007(f));
+    }
+
+    // Edit document.xml (index items + separator pages)
+    const docFile = zip.file('word/document.xml');
+    if(docFile){
+      let d = await docFile.async('string');
+      d = rebuildDoc(d, items);
+      // Inject custom items (from OT's customItems list)
+      const customItems = ot.customItems||[];
+      if(customItems.length>0) d = injectCustomItems(d, customItems);
+      zip.file('word/document.xml', fixWord2007(d));
+    }
+
+    if(pbar) pbar.style.width='80%';
+    if(status) status.textContent='Generando archivo...';
+
+    // Generate output with JSZip (handles CRC and compression correctly)
+    const outBytes = await zip.generateAsync({
+      type:'uint8array',
+      compression:'DEFLATE',
+      compressionOptions:{level:6}
+    });
+
+    if(pbar) pbar.style.width='100%';
+
+    const blob = new Blob([outBytes], {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    const url = URL.createObjectURL(blob);
+    const fname = `caratulas_OT${ot.num}_${ot.cliente}.docx`;
+    const dlBtn = document.getElementById('btn-download');
+    if(dlBtn){dlBtn.href=url;dlBtn.download=fname;}
+
+    setTimeout(()=>{
+      if(prog) prog.style.display='none';
+      if(status) status.textContent='';
+      if(btn) btn.disabled=false;
+      if(result) result.style.display='block';
+      const desc = document.getElementById('gen-result-desc');
+      if(desc) desc.textContent=`OT ${ot.num} · ${ot.cliente} · ${items.length} ítems`;
+    },200);
+
+  }catch(err){
+    if(prog) prog.style.display='none';
+    if(status) status.textContent='Error: '+err.message;
+    console.error(err);
+    if(btn) btn.disabled=false;
+  }
+}
+
+
+// ── DOCX helpers ─────────────────────────────────────────────────────────────
+function b64ToBytes(b64){const bin=atob(b64);const b=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return b;}
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function escXml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+const ALL_SEP_NORM=[
+  "PLAN DE INSPECCION Y ENSAYOS","CERTIFICADOS DE MATERIALES","WPS Y PQR","WPQ",
+  "PROCEDIMIENTO DE END","PROCEDIMIENTOS DE END","PROCEDIMIENTO DE TRATAMIENTO SUPERFICIAL",
+  "PROTOCOLO DE CONTROL DIMENSIONAL","PROTOCOLOS DE CONTROL DIMENSIONAL",
+  "INFORMES DE LIQUIDOS PENETRANTES","INFORME DE LIQUIDOS PENETRANTES",
+  "INFORME DE GAMMAGRAFIA","INFORMDE DE ULTRASONIDO","INFORME DE ULTRASONIDO",
+  "INFORME DE TRATAMIENTO SUPERFICIAL",
+  "ACTAS DE INSPECCION","ACTA DE INSPECCION","ACTAS DE INSPECCIÓN",
+  "ACTAS DE LIBERACION","ACTA DE LIBERACION"
+];
+
+function nrm(s){return s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z0-9 ]/g,'').trim();}
+function stem(s){
+  // Strip trailing S from each word for singular/plural matching
+  return nrm(s).split(' ').map(w=>w.length>3?w.replace(/S$/,''):w).join(' ');
+}
+
+function isSelected(text,selectedItems){
+  const t=nrm(text);
+  const ts=stem(text);
+  return selectedItems.some(s=>{
+    const n=nrm(s);
+    const ns=stem(s);
+    return n===t||n.includes(t)||t.includes(n)||ns===ts||ns.includes(ts)||ts.includes(ns);
+  });
+}
+
+function injectCustomItems(doc, customItems){
+  if(!customItems||!customItems.length) return doc;
+
+  // Find the anchor paragraph: INFORME DE ULTRASONIDO separator (numId=2)
+  // We insert AFTER it (or after INFORME DE GAMMAGRAFIA if ULTRASONIDO was removed)
+  // Strategy: find the last separator before INFORME DE TRATAMIENTO SUPERFICIAL
+  // and insert custom items after it
+
+  // Find a separator paragraph to use as template (copy structure, replace text)
+  // Use INFORME DE GAMMAGRAFIA as the template paragraph
+  const templateRe=/<w:p[ >](?:(?!<w:p[ >]).)*<w:numId w:val="2"\/>(?:(?!<\/w:p>).)*INFORME DE GAMMAGRAFIA(?:(?!<\/w:p>).)*<\/w:p>/s;
+  const tmplMatch=doc.match(templateRe);
+  if(!tmplMatch) return doc; // fallback: no template found
+
+  const templatePara=tmplMatch[0];
+
+  // Find INFORME DE TRATAMIENTO SUPERFICIAL separator and its preceding blanks
+  // We insert the custom items + their blank pages BEFORE tratamiento
+  const tratRe=/<w:p[ >](?:(?!<w:p[ >]).)*<w:numId w:val="2"\/>(?:(?!<\/w:p>).)*INFORME DE TRATAMIENTO SUPERFICIAL(?:(?!<\/w:p>).)*<\/w:p>/s;
+  const tratMatch=doc.match(tratRe);
+
+  // Build insertion: for each custom item, create [10 blank paras][separator+PB]
+  // Get a blank paragraph template
+  const blankRe=/<w:p><w:pPr><w:pStyle w:val="Normal"\/><w:tabs><w:tab w:val="clear" w:pos="708"\/><w:tab w:val="left" w:pos="142" w:leader="none"\/><\/w:tabs><w:snapToGrid w:val="false"\/><w:ind w:left="720" w:right="0"\/><w:jc w:val="both"\/><w:rPr><w:b\/><w:sz w:val="28"\/><w:szCs w:val="28"\/><\/w:rPr><\/w:pPr><w:r><w:rPr><w:b\/><w:sz w:val="28"\/><w:szCs w:val="28"\/><\/w:rPr><\/w:r><\/w:p>/;
+  const blankMatch=doc.match(blankRe);
+  const blankPara=blankMatch?blankMatch[0]:'<w:p><w:pPr><w:pStyle w:val="Normal"/><w:snapToGrid w:val="false"/><w:jc w:val="both"/><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr></w:r></w:p>';
+
+  let insertion='';
+  for(const item of customItems){
+    // 10 blank paragraphs
+    insertion+=blankPara.repeat(10);
+    // Separator paragraph: copy template, replace text
+    const sepPara=templatePara.replace(
+      /<w:t>INFORME DE GAMMAGRAFIA<\/w:t>/,
+      '<w:t>'+item+'</w:t>'
+    );
+    insertion+=sepPara;
+  }
+
+  // Also add the custom items to the INDEX (numId=3)
+  // Find the last numId=3 paragraph before tratamiento or actas
+  const indexInsertRe=/((?:<w:p[ >](?:(?!<w:p[ >]).)*<w:numId w:val="3"\/>(?:(?!<\/w:p>).)*<w:t>INFORME DE GAMMAGRAFIA<\/w:t>(?:(?!<\/w:p>).)*<\/w:p>))/s;
+  let docWithIndex=doc;
+  const idxMatch=docWithIndex.match(indexInsertRe);
+  if(idxMatch){
+    // Build index entries for custom items
+    // Use a numId=3 paragraph as template
+    const idxTmplRe=/<w:p[ >](?:(?!<w:p[ >]).)*<w:numId w:val="3"\/>(?:(?!<\/w:p>).)*INFORME DE GAMMAGRAFIA(?:(?!<\/w:p>).)*<\/w:p>/s;
+    const idxTmpl=docWithIndex.match(idxTmplRe);
+    if(idxTmpl){
+      let idxInsertion='';
+      for(const item of customItems){
+        idxInsertion+=idxTmpl[0].replace(
+          /<w:t>INFORME DE GAMMAGRAFIA<\/w:t>/,
+          '<w:t>'+item+'</w:t>'
+        );
+      }
+      docWithIndex=docWithIndex.replace(idxTmpl[0], idxTmpl[0]+idxInsertion);
+    }
+  }
+
+  // Insert separator pages before tratamiento superficial
+  if(tratMatch){
+    // Find the 10 blank paras before tratamiento and insert before them
+    const tratIdx=docWithIndex.indexOf(tratMatch[0]);
+    // Find start of the 10 blanks before tratamiento
+    // Go back from tratIdx to find the last non-blank (previous separator)
+    let insertPos=tratIdx;
+    // Count back 10 blank paragraphs
+    let blanksToSkip=10;
+    let searchDoc=docWithIndex.slice(0,tratIdx);
+    // Find last 10 blank paragraphs by looking for pagebreak separator before them
+    const prevSepRe=/<w:br w:type="page"\/>/g;
+    let lastPBIdx=-1;
+    let pbMatch;
+    while((pbMatch=prevSepRe.exec(searchDoc))!==null) lastPBIdx=pbMatch.index;
+    if(lastPBIdx>0){
+      // Find the paragraph containing this page break
+      const pbParaStart=searchDoc.lastIndexOf('<w:p',lastPBIdx);
+      const pbParaEnd=searchDoc.indexOf('</w:p>',lastPBIdx)+6;
+      insertPos=pbParaEnd; // insert right after the previous separator's paragraph
+    }
+    docWithIndex=docWithIndex.slice(0,insertPos)+insertion+docWithIndex.slice(insertPos);
+  } else {
+    // No tratamiento found - insert before ACTAS
+    const actasRe=/<w:p[ >](?:(?!<w:p[ >]).)*<w:numId w:val="2"\/>(?:(?!<\/w:p>).)*ACTA(?:(?!<\/w:p>).)*<\/w:p>/s;
+    const actasMatch=docWithIndex.match(actasRe);
+    if(actasMatch){
+      docWithIndex=docWithIndex.replace(actasMatch[0], insertion+actasMatch[0]);
+    } else {
+      docWithIndex+=insertion; // last resort
+    }
+  }
+
+  return docWithIndex;
+}
+
+function rebuildDoc(doc,selectedItems){
+  function isBlankPara(para){
+    // A blank spacer paragraph: no text, no numId, no page break
+    const hasText=/<w:t[^>]*>[^<]+<\/w:t>/.test(para);
+    const hasNum=/<w:numId/.test(para);
+    const hasPB=/<w:br w:type="page"/.test(para);
+    return !hasText && !hasNum && !hasPB;
+  }
+  function shouldRemove(para,numVal){
+    if(!para.includes('<w:numId w:val="'+numVal+'"/>')) return false;
+    const txts=para.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+    if(!txts) return false;
+    const text=txts.map(t=>t.replace(/<[^>]+>/g,'')).join(' ');
+    for(const sep of ALL_SEP_NORM){
+      if(nrm(text).includes(nrm(sep))) return !isSelected(sep,selectedItems);
+    }
+    return false;
+  }
+
+  // Collect all top-level paragraphs
+  const allParas=[];
+  let i=0;
+  while(i<doc.length){
+    if(doc[i]==='<'&&doc[i+1]==='w'&&doc[i+2]===':'&&doc[i+3]==='p'&&(doc[i+4]===' '||doc[i+4]==='>')){
+      const start=i;
+      let depth=0,j=i,end=-1;
+      while(j<doc.length){
+        if(doc[j]==='<'&&doc[j+1]==='w'&&doc[j+2]===':'&&doc[j+3]==='p'&&(doc[j+4]===' '||doc[j+4]==='>')){
+          depth++;j+=4;
+        }else if(doc[j]==='<'&&doc[j+1]==='/'&&doc[j+2]==='w'&&doc[j+3]===':'&&doc[j+4]==='p'&&doc[j+5]==='>'){
+          depth--;
+          if(depth===0){end=j+6;break;}
+          j+=6;
+        }else{j++;}
+      }
+      if(end<0){i++;continue;}
+      allParas.push({text:doc.slice(start,end),start,end,isBlank:false,remove:false});
+      i=end;
+    }else{i++;}
+  }
+
+  // Mark blank paragraphs
+  allParas.forEach(p=>{ p.isBlank=isBlankPara(p.text); });
+
+  // Mark separators to remove, and their preceding blank paragraphs
+  for(let k=0;k<allParas.length;k++){
+    const p=allParas[k];
+    if(shouldRemove(p.text,'2')||shouldRemove(p.text,'3')){
+      p.remove=true;
+      // Also remove the blank paragraphs immediately preceding this separator
+      let b=k-1;
+      while(b>=0&&allParas[b].isBlank&&!allParas[b].remove){
+        allParas[b].remove=true;
+        b--;
+      }
+    }
+  }
+
+  // Rebuild: non-paragraph content + kept paragraphs
+  const result=[];
+  let pos=0;
+  for(const p of allParas){
+    result.push(doc.slice(pos,p.start)); // content before this para
+    if(!p.remove) result.push(p.text);
+    pos=p.end;
+  }
+  result.push(doc.slice(pos));
+  return result.join('');
+}
+
+// ── Procedures Library ───────────────────────────────────────────────────────
+
+// Map: which procedure types match which databook items
+
+// ── Procedure categories ──────────────────────────────────────────────────────
+const PROC_CATEGORIES = {
+  'Procedimientos de Ensayos': [
+    'Líquidos Penetrantes', 'Radiografía / Gammagrafía', 'Ultrasonido',
+    'Visual de Soldaduras', 'Dimensional', 'Prueba Hidráulica', 'Prueba Neumática'
+  ],
+  'Procedimiento de Pintura / Tratamiento Superficial': [
+    'Pintura',
+    'Galvanizado',
+    'Decapado y Pasivado'
+  ],
+  'Procedimiento de Soldadura (WPS/PQR)': [
+    'WPS / Soldadura'
+  ]
+};
+// Returns category for a given type (custom types go to Ensayos by default)
+function procCategory(type) {
+  for(const [cat, types] of Object.entries(PROC_CATEGORIES)) {
+    if(types.includes(type)) return cat;
+  }
+  return 'Procedimientos de Ensayos'; // custom types default to ensayos
+}
+
+
+// Map procedure type → databook items to add when manually assigned
+const PROC_TYPE_TO_ITEMS = {
+  'Líquidos Penetrantes':                ['INFORMES DE LIQUIDOS PENETRANTES', 'PROCEDIMIENTOS DE END'],
+  'Radiografía / Gammagrafía':           ['INFORME DE GAMMAGRAFIA', 'PROCEDIMIENTOS DE END'],
+  'Ultrasonido':                         ['INFORME DE ULTRASONIDO', 'PROCEDIMIENTOS DE END'],
+  'Visual de Soldaduras':                ['PROCEDIMIENTOS DE END'],
+  'Dimensional':                         ['PROTOCOLO DE CONTROL DIMENSIONAL'],
+  'Pintura':      ['PROCEDIMIENTO DE TRATAMIENTO SUPERFICIAL', 'INFORME DE TRATAMIENTO SUPERFICIAL'],
+  'Galvanizado':  ['PROCEDIMIENTO DE TRATAMIENTO SUPERFICIAL', 'INFORME DE TRATAMIENTO SUPERFICIAL'],
+  'Decapado y Pasivado': ['PROCEDIMIENTO DE TRATAMIENTO SUPERFICIAL', 'INFORME DE TRATAMIENTO SUPERFICIAL'],
+  'Prueba Hidráulica':                   ['INFORME DE PRUEBA HIDRAULICA'],
+  'Prueba Neumática':                    ['INFORME DE PRUEBA NEUMATICA'],
+  'WPS / Soldadura':                     ['WPS Y PQR'],
+  'Otro':                                []
+};
+
+const PROC_ITEM_MAP = {
+  'Líquidos Penetrantes': ['LIQUIDOS PENETRANTE', 'LP'],
+  'Radiografía / Gammagrafía': ['RADIOGRAFI', 'GAMMAGRAF'],
+  'Ultrasonido': ['ULTRASONIDO'],
+  'Visual de Soldaduras': ['VISUAL DE SOLDADURAS', 'CONTROL VISUAL'],
+  'Dimensional': ['DIMENSIONAL', 'ISO 13920'],
+  'Pintura':      ['PINTURA', 'TRATAMIENTO SUPERFICIAL'],
+  'Galvanizado':  ['GALVANIZADO', 'GALVANIZ'],
+  'Decapado y Pasivado': ['DECAPADO', 'PASIVADO'],
+  'Prueba Hidráulica': ['PRUEBA HIDRAULICA', 'HIDRAUL'],
+  'Prueba Neumática': ['PRUEBA NEUMATICA', 'NEUMAT'],
+  'WPS / Soldadura': [],  // never auto-matched — assign manually per OT
+  'Otro': []
+};
+
+// ── PST number matching for WPS/PQR procedures ───────────────────────────────
+function extractPSTFromFilename(filename) {
+  // Extract PST number from filename, e.g. "PST-14-08.pdf" → "14-08"
+  const name = filename.replace(/\.[^.]+$/, '');
+  // Try: PST[separator]NUM[sep]NUM — handles PST-14-08, PST N°14/08, PST Nro 14-08, etc.
+  let m = name.match(/PST[\s\-_Nnoº°#rRoO]*(\d{1,2})[\-\/\.\s_](\d{2,4})/i);
+  if(m) return m[1] + '-' + m[2];
+  // Fallback: PST followed by 4 digits (e.g. PST1408)
+  m = name.match(/PST[\s\-_]*(\d{4})/i);
+  if(m) return m[1].slice(0,2) + '-' + m[1].slice(2);
+  // Last resort: any digits after PST
+  m = name.match(/PST[\s\-_]*(\d{2,4})/i);
+  if(m) return m[1];
+  return null;
+}
+
+function extractPSTsFromText(text) {
+  // Extract all PST numbers from F-07 text, e.g. "PST Nº 14/08", "PST N  14/08"
+  const psts = new Set();
+  const re = /PST[\s\-_Nnoº°#rRoO]*(\d{1,2})[\-\/\.\s](\d{2,4})/gi;
+  let m;
+  while((m = re.exec(text)) !== null) {
+    psts.add(m[1] + '-' + m[2]);
+  }
+  return psts;
+}
+
+function normPST(s) {
+  // Normalize PST number: "14-08" and "14/08" both become "14-8"
+  return s.split(/[-\/]/).map(p => String(parseInt(p,10))).join('-');
+}
+
+function wpsMatchesOT(proc, ot) {
+  if(proc.type !== 'WPS / Soldadura') return false;
+  const filePST = extractPSTFromFilename(proc.filename || proc.name);
+  if(!filePST) return false;
+  const f07text = ot.f07text || '';
+  if(!f07text) return false;
+  const f07PSTs = extractPSTsFromText(f07text);
+  if(!f07PSTs.size) return false;
+  const fileNorm = normPST(filePST);
+  const matched = [...f07PSTs].some(p => normPST(p) === fileNorm);
+  // Debug: log first time called
+  if(!wpsMatchesOT._logged) {
+    wpsMatchesOT._logged = true;
+    console.log('[WPS] f07text snippet:', f07text.slice(0,200));
+    console.log('[WPS] f07PSTs:', [...f07PSTs]);
+    console.log('[WPS] sample proc:', proc.filename, '→ PST:', filePST, '→ norm:', fileNorm, '→ match:', matched);
+  }
+  return matched;
+}
+
+function procMatchesOT(proc, ot) {
+  // Never match excluded procs
+  if((ot.excludedProcs||[]).includes(proc.id)) return false;
+  // WPS / Soldadura: match by PST number in filename vs F-07 text
+  if(proc.type === 'WPS / Soldadura') return wpsMatchesOT(proc, ot);
+  // Only auto-match when F-07 has been loaded (f07s.length > 0)
+  const f07Loaded = ot.f07s && ot.f07s.length > 0;
+  if(!f07Loaded && !(ot.customItems && ot.customItems.length)) return false;
+  const allItems = [...(ot.items || (f07Loaded ? [] : ALL_ITEMS)), ...(ot.customItems||[])];
+  const itemsText = allItems.join(' ').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const keywords = PROC_ITEM_MAP[proc.type] || [];
+  if(keywords.length === 0) return false; // "Otro" doesn't auto-match
+  return keywords.some(kw => itemsText.includes(kw.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'')));
+}
+
+function updateProcsSidebarCount() {
+  const procs = db.procedures || [];
+  const counts = { 'END': 0, 'Tratamiento Superficial': 0, 'WPS y PQR': 0 };
+  procs.forEach(p => {
+    const cat = procCategory(p.type);
+    const key = CAT_TO_SIDEBAR[cat];
+    if(key && counts[key] !== undefined) counts[key]++;
+  });
+  const labels = {
+    'END': 'sidebar-count-end',
+    'Tratamiento Superficial': 'sidebar-count-sup',
+    'WPS y PQR': 'sidebar-count-wps'
+  };
+  const descs = {
+    'END': 'Ensayos no destructivos',
+    'Tratamiento Superficial': 'Pintura y tratamientos',
+    'WPS y PQR': 'Soldadura'
+  };
+  Object.entries(labels).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if(el) el.textContent = counts[key] > 0
+      ? counts[key] + ' procedimiento' + (counts[key] !== 1 ? 's' : '')
+      : descs[key];
+  });
+}
+
+// Map sidebar keys to PROC_CATEGORIES keys
+const SIDEBAR_TO_CAT = {
+  'END': 'Procedimientos de Ensayos',
+  'Tratamiento Superficial': 'Procedimiento de Pintura / Tratamiento Superficial',
+  'WPS y PQR': 'Procedimiento de Soldadura (WPS/PQR)'
+};
+const CAT_TO_SIDEBAR = Object.fromEntries(Object.entries(SIDEBAR_TO_CAT).map(([k,v])=>[v,k]));
+const SIDEBAR_IDS = { 'END':'sidebar-proc-end', 'Tratamiento Superficial':'sidebar-proc-sup', 'WPS y PQR':'sidebar-proc-wps' };
+
+let currentProcSection = 'END'; // which submenu is active
+
+function showProceduresView(section) {
+  if(section) currentProcSection = section;
+  currentOT = null;
+  currentTab = 'datos';
+  document.querySelectorAll('.ot-item').forEach(el => el.classList.remove('active'));
+  const activeId = SIDEBAR_IDS[currentProcSection];
+  if(activeId) document.getElementById(activeId)?.classList.add('active');
+  updateProcsSidebarCount();
+  const titles = {
+    'END': 'Procedimientos de Ensayos No Destructivos',
+    'Tratamiento Superficial': 'Procedimientos de Tratamiento Superficial',
+    'WPS y PQR': 'Procedimientos de Soldadura — WPS y PQR'
+  };
+  document.getElementById('topbar-title').textContent = titles[currentProcSection] || 'Procedimientos';
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary btn-sm" onclick="openAddProcModal()">+ Cargar procedimiento</button>`;
+  renderProceduresLibrary();
+}
+
+function renderProceduresLibrary() {
+  const el = document.getElementById('main-content');
+  const allProcs = db.procedures || [];
+  // Filter to current section
+  const activeCat = SIDEBAR_TO_CAT[currentProcSection] || Object.values(SIDEBAR_TO_CAT)[0];
+  const procs = allProcs.filter(p => procCategory(p.type) === activeCat);
+
+  if(!procs.length) {
+    el.innerHTML = `<div class="empty fade-in">
+      <div class="empty-icon">📋</div>
+      <h3>Sin procedimientos en esta sección</h3>
+      <p>Cargá procedimientos para asociarlos automáticamente a las OTs.</p>
+      <br><button class="btn btn-primary" onclick="openAddProcModal()">+ Cargar procedimiento</button>
+    </div>`;
+    return;
+  }
+
+  // Group by type within this section
+  const byCategory = {};
+  Object.keys(PROC_CATEGORIES).forEach(cat => { byCategory[cat] = {}; });
+  procs.forEach(p => {
+    const cat = procCategory(p.type);
+    if(!byCategory[cat]) byCategory[cat] = {};
+    if(!byCategory[cat][p.type]) byCategory[cat][p.type] = [];
+    byCategory[cat][p.type].push(p);
+  });
+
+  const procCardHtml = (p) => `
+    <div class="proc-card">
+      <div class="proc-icon" style="font-size:18px">${p.fileType==='pdf'?'📕':'📘'}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500">${esc(p.name)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:1px">${esc(p.type)} · ${p.date}</div>
+      </div>
+      <div style="display:flex;gap:5px;align-items:center">
+        <button class="btn btn-secondary btn-sm" title="Imprimir" onclick="printProc('${p.id}')" style="padding:5px 8px">
+          <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+        </button>
+        <button class="btn btn-secondary btn-sm" title="Descargar" onclick="downloadProc('${p.id}')" style="padding:5px 8px">
+          <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zm7-18v10.59l-3.29-3.3-1.42 1.42L12 16l4.71-4.71-1.42-1.42L13 13.17V2h-1z"/></svg>
+        </button>
+        <button class="btn btn-danger btn-sm" onclick="deleteProc('${p.id}')" style="padding:5px 8px">✕</button>
+      </div>
+    </div>`;
+
+  // Only show types that belong to the active section
+  const activeTypeMap = byCategory[activeCat] || {};
+  el.innerHTML = `<div class="fade-in">
+    ${Object.keys(activeTypeMap).length === 0
+      ? '<p style="font-size:13px;color:var(--text3)">Sin procedimientos en esta sección.</p>'
+      : Object.entries(activeTypeMap).map(([type, list]) => `
+        <div class="card" style="margin-bottom:10px">
+          <div class="card-header" style="margin-bottom:8px">
+            <span class="card-title">${type}</span>
+            <span class="chip">${list.length} archivo${list.length>1?'s':''}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            ${list.map(procCardHtml).join('')}
+          </div>
+        </div>`).join('')}
+  </div>`;
+}
+
+function procIsManual(ot, procId) {
+  return (ot.manualProcs||[]).includes(procId);
+}
+
+// Sort ot.items according to canonical order:
+// standard items by ALL_ITEMS index; custom items (pruebas, etc.) slot in
+// between "INFORME DE ULTRASONIDO" (pos 9) and "INFORME DE TRATAMIENTO SUPERFICIAL" (pos 10)
+function sortItems(ot) {
+  if(!ot.items) return;
+  const INSERT_AFTER = ALL_ITEMS.indexOf('INFORME DE ULTRASONIDO'); // 9 → custom after here
+  ot.items.sort((a, b) => {
+    const ia = ALL_ITEMS.indexOf(a);
+    const ib = ALL_ITEMS.indexOf(b);
+    // Effective position: custom items get INSERT_AFTER + 0.5 so they sort between pos 9 and 10
+    const pa = ia >= 0 ? ia : INSERT_AFTER + 0.5;
+    const pb = ib >= 0 ? ib : INSERT_AFTER + 0.5;
+    if(pa !== pb) return pa - pb;
+    // Both custom: alphabetical
+    return a.localeCompare(b, 'es');
+  });
+}
+
+function unassignProc(procId) {
+  const ot = db.ots.find(o => o.id === currentOT);
+  if(!ot) return;
+  const autoMatched = (db.procedures||[]).filter(p => procMatchesOT(p, ot));
+  const isAuto = autoMatched.some(p => p.id === procId);
+  if(isAuto) {
+    // Add to excluded list so it won't auto-match anymore
+    if(!ot.excludedProcs) ot.excludedProcs = [];
+    if(!ot.excludedProcs.includes(procId)) ot.excludedProcs.push(procId);
+  } else {
+    // Remove from manual list via toggleManualProc
+    toggleManualProc(procId);
+    return;
+  }
+  // Remove associated databook items if no other proc of same type remains
+  const proc = (db.procedures||[]).find(p => p.id === procId);
+  if(proc) {
+    const stillAssigned = (db.procedures||[]).some(p =>
+      p.type === proc.type && p.id !== procId &&
+      ((ot.manualProcs||[]).includes(p.id) || (procMatchesOT(p, ot) && !(ot.excludedProcs||[]).includes(p.id)))
+    );
+    if(!stillAssigned) {
+      const itemsToRemove = PROC_TYPE_TO_ITEMS[proc.type] || [];
+      itemsToRemove.forEach(item => {
+        if((DEFAULT_ITEMS||[]).includes(item)) return;
+        if(ot.items) {
+          const i = ot.items.indexOf(item);
+          if(i >= 0) ot.items.splice(i, 1);
+        }
+      });
+    }
+  }
+  saveDB();
+  renderTab();
+}
+
+function reassignProc(procId) {
+  const ot = db.ots.find(o => o.id === currentOT);
+  if(!ot) return;
+  // If it was excluded, un-exclude it (restore auto-match)
+  if((ot.excludedProcs||[]).includes(procId)) {
+    ot.excludedProcs = ot.excludedProcs.filter(id => id !== procId);
+    saveDB(); renderTab(); return;
+  }
+  // Otherwise add as manual
+  toggleManualProc(procId);
+}
+
+function toggleManualProc(procId) {
+  const ot = db.ots.find(o => o.id === currentOT);
+  if(!ot) return;
+  if(!ot.manualProcs) ot.manualProcs = [];
+  const proc = (db.procedures||[]).find(p => p.id === procId);
+  const idx = ot.manualProcs.indexOf(procId);
+  const isRemoving = idx >= 0;
+
+  if(isRemoving) {
+    ot.manualProcs.splice(idx, 1);
+    // Remove associated databook items only if no other assigned proc of the same type remains
+    if(proc) {
+      const sameTypeStillAssigned = (db.procedures||[]).some(p =>
+        p.type === proc.type && p.id !== procId &&
+        (ot.manualProcs.includes(p.id) || procMatchesOT(p, ot))
+      );
+      if(!sameTypeStillAssigned) {
+        const itemsToRemove = PROC_TYPE_TO_ITEMS[proc.type] || [];
+        itemsToRemove.forEach(item => {
+          // Only remove if it was manually added (not in DEFAULT_ITEMS and not detected by F-07 keywords)
+          if(DEFAULT_ITEMS.includes(item)) return;
+          if(ot.items) {
+            const i = ot.items.indexOf(item);
+            if(i >= 0) ot.items.splice(i, 1);
+          }
+        });
+      }
+    }
+  } else {
+    ot.manualProcs.push(procId);
+    // Add associated databook items to ot.items
+    if(proc) {
+      if(!ot.items) ot.items = [...DEFAULT_ITEMS];
+      const itemsToAdd = PROC_TYPE_TO_ITEMS[proc.type] || [];
+      itemsToAdd.forEach(item => {
+        if(!ot.items.includes(item)) ot.items.push(item);
+      });
+      // Re-sort according to canonical ALL_ITEMS order
+      sortItems(ot);
+    }
+  }
+  saveDB();
+  renderTab();
+}
+
+function procButtons(p) {
+  return `<div style="display:flex;gap:5px;flex-shrink:0">
+    <button class="btn btn-secondary btn-sm" title="Imprimir" onclick="printProc('${p.id}')" style="padding:5px 8px">
+      <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+    </button>
+    <button class="btn btn-secondary btn-sm" title="Descargar" onclick="downloadProc('${p.id}')" style="padding:5px 8px">
+      <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zm7-18v10.59l-3.29-3.3-1.42 1.42L12 16l4.71-4.71-1.42-1.42L13 13.17V2h-1z"/></svg>
+    </button>
+  </div>`;
+}
+
+function renderTabProcedimientos(ot, el) {
+  const allProcs = db.procedures || [];
+  const autoMatched = allProcs.filter(p => procMatchesOT(p, ot));
+  const autoIds = new Set(autoMatched.map(p => p.id));
+  const manualIds = ot.manualProcs || [];
+  const manualOnly = allProcs.filter(p => manualIds.includes(p.id) && !autoIds.has(p.id));
+  const assignable = allProcs.filter(p => !autoIds.has(p.id) && !manualIds.includes(p.id));
+  const assigned = [...autoMatched, ...manualOnly];
+  const f07Loaded = Array.isArray(ot.items);
+
+  // Sort helpers
+  const alpha = arr => [...arr].sort((a,b) => a.name.localeCompare(b.name, 'es'));
+
+  // Single proc card row
+  const assignedCard = (p) => {
+    const isAuto = autoIds.has(p.id);
+    return `<div class="proc-card ${isAuto?'proc-matched':''}"
+      style="${!isAuto?'border-color:var(--amber);background:var(--amber-light)':''}">
+      <div class="proc-icon" style="font-size:16px">${p.fileType==='pdf'?'📕':'📘'}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500">${esc(p.name)}</div>
+        <div style="display:flex;align-items:center;gap:5px;margin-top:2px">
+          <span class="proc-type-badge" ${!isAuto?'style="background:var(--amber);color:white"':''}>${esc(p.type)}</span>
+          <span style="font-size:10px;color:var(--text3)">${isAuto?'automático':'manual'}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
+        ${procButtons(p)}
+        <button class="btn btn-danger btn-sm" title="Quitar"
+          onclick="unassignProc('${p.id}')" style="padding:5px 8px">✕</button>
+      </div>
+    </div>`;
+  };
+
+  const availCard = (p) => `
+    <div class="proc-card" style="opacity:.8">
+      <div class="proc-icon" style="font-size:16px">${p.fileType==='pdf'?'📕':'📘'}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500">${esc(p.name)}</div>
+        <span class="proc-type-badge" style="background:var(--border);color:var(--text3)">${esc(p.type)}</span>
+      </div>
+      <div style="display:flex;gap:5px;align-items:center">
+        ${procButtons(p)}
+        <button class="btn btn-secondary btn-sm"
+          onclick="toggleManualProc('${p.id}')"
+          style="padding:5px 10px;font-size:12px">+ Asignar</button>
+      </div>
+    </div>`;
+
+  // Build accordion section per category
+  const WPS_NOTE = ot.f07text ? 'No se encontraron PSTs coincidentes en el F-07. Podés asignarlos manualmente desde abajo.' : 'Cargá el F-07 para asignación automática por número de PST, o asignalos manualmente.';
+  const accordion = (id, title, procs, renderCard, emptyMsg='') => {
+    if(!procs.length && !emptyMsg) return '';
+    const open = false;
+    return `
+      <details ${open?'open':''} style="margin-bottom:8px">
+        <summary style="cursor:pointer;user-select:none;list-style:none;
+          display:flex;align-items:center;justify-content:space-between;
+          padding:10px 14px;background:var(--surface2);border:1px solid var(--border);
+          border-radius:var(--r);font-size:13px;font-weight:600;color:var(--text)">
+          <span>${title}</span>
+          <span style="display:flex;align-items:center;gap:8px">
+            ${procs.length?`<span class="chip">${procs.length}</span>`:''}
+            <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"
+              style="transition:transform .2s;transform:rotate(0deg)" class="acc-arrow">
+              <path d="M7 10l5 5 5-5z"/>
+            </svg>
+          </span>
+        </summary>
+        <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);
+          padding:10px;display:flex;flex-direction:column;gap:7px">
+          ${procs.length ? alpha(procs).map(renderCard).join('') :
+            `<p style="font-size:13px;color:var(--text3);margin:4px 0">${emptyMsg}</p>`}
+        </div>
+      </details>`;
+  };
+
+  // Group by category
+  const groupByCat = (procs) => {
+    const r = {};
+    Object.keys(PROC_CATEGORIES).forEach(c => r[c]=[]);
+    procs.forEach(p => { const c=procCategory(p.type); if(!r[c])r[c]=[]; r[c].push(p); });
+    return r;
+  };
+
+  const assignedByCat = groupByCat(assigned);
+  const availByCat = groupByCat(assignable);
+  const totalAssigned = assigned.length;
+  const totalAvail = assignable.length;
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Asignados a esta OT
+          ${totalAssigned?`<span class="chip" style="margin-left:6px">${totalAssigned}</span>`:''}
+        </span>
+        <button class="btn btn-secondary btn-sm" onclick="showProceduresView()">📋 Biblioteca</button>
+      </div>
+
+      ${!f07Loaded && !totalAssigned ? `
+        <div style="padding:12px;background:var(--surface2);border-radius:var(--r);
+          border:1px dashed var(--border);font-size:13px;color:var(--text3);text-align:center">
+          Cargá el F-07 para asignar procedimientos automáticamente, o asignalos manualmente desde abajo.
+        </div>` :
+        totalAssigned === 0 ? `
+        <p style="font-size:13px;color:var(--text3)">
+          Sin procedimientos asignados. Podés agregarlos desde la sección de disponibles.
+        </p>` :
+        Object.entries(assignedByCat).map(([cat, procs]) =>
+          accordion('asgn-'+cat, cat, procs, assignedCard,
+            cat === 'Procedimiento de Soldadura (WPS/PQR)' ? WPS_NOTE : '')
+        ).join('')}
+    </div>
+
+    ${allProcs.length === 0 ? `
+      <div class="card" style="border-style:dashed">
+        <p style="font-size:13px;color:var(--text3)">
+          <a href="#" onclick="showProceduresView();return false;" style="color:var(--accent)">
+            Cargá procedimientos en la biblioteca →
+          </a>
+        </p>
+      </div>` : totalAvail > 0 ? `
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title" style="color:var(--text2)">Disponibles para asignar
+            <span class="chip" style="margin-left:6px">${totalAvail}</span>
+          </span>
+        </div>
+        ${Object.entries(availByCat).map(([cat, procs]) =>
+          accordion('avail-'+cat, cat, procs, availCard)
+        ).join('')}
+      </div>` : ''}`;
+
+  // Rotate arrows on open/close
+  el.querySelectorAll('details').forEach(d => {
+    const arrow = d.querySelector('.acc-arrow');
+    d.addEventListener('toggle', () => {
+      if(arrow) arrow.style.transform = d.open ? 'rotate(180deg)' : 'rotate(0deg)';
+    });
+    if(d.open && arrow) arrow.style.transform = 'rotate(180deg)';
+  });
+}
+
+
+function openAssignProcModal() {
+  // Just scroll to the available section
+  const el = document.querySelector('.card[style*="dashed"]');
+  if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function buildTypeSelect() {
+  const sel = document.getElementById('proc-type-select');
+  if(!sel) return;
+  const custom = (db.customProcTypes || []).map(t => typeof t === 'string' ? t : t.name);
+  const current = sel.value;
+  sel.innerHTML = `
+    <optgroup label="Procedimientos de Ensayos">
+      <option>Líquidos Penetrantes</option>
+      <option>Radiografía / Gammagrafía</option>
+      <option>Ultrasonido</option>
+      <option>Visual de Soldaduras</option>
+      <option>Dimensional</option>
+      <option>Prueba Hidráulica</option>
+      <option>Prueba Neumática</option>
+      ${custom.length>0 ? custom.map(t=>`<option>${t}</option>`).join('') : ''}
+    </optgroup>
+    <optgroup label="Pintura / Tratamiento Superficial">
+      <option>Pintura</option>
+      <option>Galvanizado</option>
+      <option>Decapado y Pasivado</option>
+    </optgroup>
+    <optgroup label="Soldadura">
+      <option>WPS / Soldadura</option>
+    </optgroup>
+    <option disabled style="color:var(--border)">──────────</option>
+    <option value="__custom__">+ Nuevo tipo personalizado...</option>`;
+  // Restore selection if still valid
+  if(current && current !== '__custom__') {
+    try { sel.value = current; } catch(e) {}
+  }
+}
+
+function onProcTypeChange(val) {
+  const customField = document.getElementById('custom-type-field');
+  if(val === '__custom__') {
+    customField.style.display = 'block';
+    setTimeout(() => document.getElementById('custom-type-input').focus(), 50);
+  } else {
+    customField.style.display = 'none';
+  }
+}
+
+function confirmCustomType() {
+  const name = document.getElementById('custom-type-input').value.trim().toUpperCase();
+  if(!name) { document.getElementById('custom-type-input').focus(); return; }
+
+  // Parse keywords: split by comma, normalize each
+  const kwRaw = document.getElementById('custom-type-kw').value.trim();
+  let keywords = kwRaw
+    ? kwRaw.split(',').map(k => k.trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z0-9 ]/g,'').trim()).filter(k => k)
+    : [];
+  // Always include the name itself as a keyword
+  const nameNorm = name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z0-9 ]/g,'').trim();
+  if(!keywords.includes(nameNorm)) keywords.unshift(nameNorm);
+
+  if(!db.customProcTypes) db.customProcTypes = [];
+  // Update or add
+  const existing = db.customProcTypes.find(t => t.name === name);
+  if(existing) {
+    existing.keywords = keywords;
+  } else {
+    db.customProcTypes.push({name, keywords});
+  }
+  PROC_ITEM_MAP[name] = keywords;
+  saveDB();
+  buildTypeSelect();
+  document.getElementById('proc-type-select').value = name;
+  document.getElementById('custom-type-field').style.display = 'none';
+  document.getElementById('custom-type-kw').value = '';
+  document.getElementById('custom-type-input').value = '';
+  document.getElementById('custom-type-kw').value = '';
+}
+
+function openAddProcModal() {
+  document.getElementById('proc-name-input').value = '';
+  document.getElementById('proc-file-label').textContent = 'Ningún archivo seleccionado';
+  document.getElementById('proc-file-label').style.color = 'var(--text3)';
+  document.getElementById('custom-type-field').style.display = 'none';
+  window._pendingProcFile = null;
+  buildTypeSelect();
+  // Pre-select a type matching the active section
+  const sectionDefaults = {
+    'END': 'Líquidos Penetrantes',
+    'Tratamiento Superficial': 'Pintura',
+    'WPS y PQR': 'WPS / Soldadura'
+  };
+  document.getElementById('proc-type-select').value = sectionDefaults[currentProcSection] || 'Líquidos Penetrantes';
+  // For WPS section there is only one type — hide the selector entirely
+  const typeField = document.getElementById('single-file-type');
+  if(currentProcSection === 'WPS y PQR') {
+    document.getElementById('proc-type-select').value = 'WPS / Soldadura';
+    if(typeField) typeField.style.display = 'none';
+  } else {
+    if(typeField) typeField.style.display = '';
+  }
+  document.getElementById('modal-add-proc').style.display = 'flex';
+  setTimeout(() => document.getElementById('proc-name-input').focus(), 50);
+}
+
+function closeAddProcModal() {
+  document.getElementById('modal-add-proc').style.display = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('proc-file-input').addEventListener('change', function() {
+    const files = Array.from(this.files);
+    if(!files.length) return;
+
+    if(files.length === 1) {
+      // Single file mode: classic behaviour
+      window._pendingProcFiles = null;
+      window._pendingProcFile = files[0];
+      document.getElementById('proc-file-label').textContent = files[0].name;
+      document.getElementById('proc-file-label').style.color = 'var(--accent)';
+      document.getElementById('single-file-name').style.display = 'block';
+      document.getElementById('single-file-type').style.display = 'block';
+      document.getElementById('proc-files-list').style.display = 'none';
+      const nameEl = document.getElementById('proc-name-input');
+      if(!nameEl.value) nameEl.value = files[0].name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+    } else {
+      // Multi-file mode: show per-file rows
+      window._pendingProcFile = null;
+      window._pendingProcFiles = files;
+      document.getElementById('proc-file-label').textContent = files.length + ' archivos seleccionados';
+      document.getElementById('proc-file-label').style.color = 'var(--accent)';
+      document.getElementById('single-file-name').style.display = 'none';
+      document.getElementById('single-file-type').style.display = 'none';
+      document.getElementById('custom-type-field').style.display = 'none';
+      buildMultiFileRows(files);
+    }
+  });
+});
+
+function buildMultiFileRows(files) {
+  const container = document.getElementById('proc-files-list');
+  container.style.display = 'flex';
+  const isWPS = (currentProcSection === 'WPS y PQR');
+  const typeOptions = `
+    <optgroup label="Ensayos">
+      <option>Líquidos Penetrantes</option>
+      <option>Radiografía / Gammagrafía</option>
+      <option>Ultrasonido</option>
+      <option>Visual de Soldaduras</option>
+      <option>Dimensional</option>
+      <option>Prueba Hidráulica</option>
+      <option>Prueba Neumática</option>
+    </optgroup>
+    <optgroup label="Pintura">
+      <option>Pintura</option>
+      <option>Galvanizado</option>
+      <option>Decapado y Pasivado</option>
+    </optgroup>
+    <optgroup label="Soldadura">
+      <option>WPS / Soldadura</option>
+    </optgroup>`;
+  // "Apply to all" header — hidden for WPS (single type)
+  const applyAll = isWPS ? '' : `
+    <div style="background:var(--accent-light);border:1px solid var(--accent-soft);border-radius:var(--r);padding:10px 12px;margin-bottom:4px">
+      <div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:6px">⚡ Aplicar un tipo a todos los archivos</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="mf-apply-all-type" style="flex:1;font-size:12px;padding:6px 8px">${typeOptions}</select>
+        <button class="btn btn-primary btn-sm" onclick="applyTypeToAll()" style="white-space:nowrap">Aplicar a todos</button>
+      </div>
+    </div>`;
+  const rows = applyAll + files.map((f, i) => {
+    const nameDefault = f.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').toUpperCase();
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:500">
+        ${f.fileType==='pdf'?'📕':'📘'} ${f.name}
+      </div>
+      <div style="display:grid;grid-template-columns:${isWPS?'1fr':'1fr 1fr'};gap:8px">
+        <div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:3px">Nombre</div>
+          <input type="text" value="${nameDefault}" id="mf-name-${i}"
+            style="width:100%;font-size:12px;padding:5px 8px"
+            oninput="this.value=this.value.toUpperCase()">
+        </div>
+        ${isWPS ? `<input type="hidden" id="mf-type-${i}" value="WPS / Soldadura">` : `<div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:3px">Tipo</div>
+          <select id="mf-type-${i}" style="width:100%;font-size:12px;padding:5px 8px">${typeOptions}</select>
+        </div>`}
+      </div>
+    </div>`;
+  }).join('');
+  container.innerHTML = rows;
+}
+
+function applyTypeToAll() {
+  const type = document.getElementById('mf-apply-all-type').value;
+  const selects = document.querySelectorAll('[id^="mf-type-"]');
+  selects.forEach(sel => { sel.value = type; });
+}
+
+async function saveMultipleProcs() {
+  const files = window._pendingProcFiles;
+  const btn = document.querySelector('#modal-add-proc .btn-primary');
+  btn.disabled = true;
+
+  let saved = 0;
+  for(let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const name = (document.getElementById('mf-name-' + i)?.value || '').trim();
+    const type = document.getElementById('mf-type-' + i)?.value || 'Líquidos Penetrantes';
+    if(!name) continue;
+
+    btn.textContent = `Guardando ${i+1}/${files.length}...`;
+    try {
+      const fileType = file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx';
+      const mimeType = file.type || (fileType === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      const procId = 'proc_' + Date.now() + '_' + i;
+      const arrayBuffer = await file.arrayBuffer();
+      const bytesArr = new Uint8Array(arrayBuffer);
+      let b64 = '';
+      const CHUNK = 8192;
+      for(let j = 0; j < bytesArr.length; j += CHUNK){
+        b64 += String.fromCharCode(...bytesArr.subarray(j, j + CHUNK));
+      }
+      b64 = btoa(b64);
+      await idbSave(procId, b64, mimeType, file.name);
+      if(!db.procedures) db.procedures = [];
+      db.procedures.push({ id: procId, name, type, fileType, filename: file.name,
+        date: new Date().toLocaleDateString('es-AR'), mimeType });
+      saved++;
+    } catch(e) {
+      console.error('Error saving', file.name, e);
+    }
+  }
+
+  saveDB();
+  window._pendingProcFiles = null;
+  btn.disabled = false;
+  btn.textContent = 'Guardar';
+  closeAddProcModal();
+  updateProcsSidebarCount();
+  if(currentOT) renderTab(); else renderProceduresLibrary();
+}
+
+async function saveProc() {
+  // Multi-file mode
+  if(window._pendingProcFiles && window._pendingProcFiles.length > 0) {
+    await saveMultipleProcs();
+    return;
+  }
+  const name = document.getElementById('proc-name-input').value.trim();
+  // If user typed a custom type but didn't press Enter, confirm it now
+  let type = document.getElementById('proc-type-select').value;
+  if(type === '__custom__') {
+    const customName = document.getElementById('custom-type-input').value.trim().toUpperCase();
+    if(!customName) { alert('Ingresá el nombre del tipo personalizado.'); return; }
+    confirmCustomType();
+    type = customName;
+  }
+  const file = window._pendingProcFile;
+  if(!name) { alert('Ingresá un nombre para el procedimiento.'); return; }
+  if(!file) { alert('Seleccioná un archivo.'); return; }
+
+  const btn = document.querySelector('#modal-add-proc .btn-primary');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  try {
+    const fileType = file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'docx';
+    const mimeType = file.type || (fileType === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    const procId = 'proc_' + Date.now();
+
+    // Read file as ArrayBuffer and store in IndexedDB (no localStorage size limit)
+    const arrayBuffer = await file.arrayBuffer();
+    // Convert to base64 in chunks to avoid call stack overflow on large files
+    const bytes = new Uint8Array(arrayBuffer);
+    let b64 = '';
+    const CHUNK = 8192;
+    for(let i = 0; i < bytes.length; i += CHUNK){
+      b64 += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    }
+    b64 = btoa(b64);
+    await idbSave(procId, b64, mimeType, file.name);
+
+    const proc = {
+      id: procId,
+      name, type, fileType,
+      filename: file.name,
+      date: new Date().toLocaleDateString('es-AR'),
+      mimeType
+      // data NOT stored here — lives in IndexedDB
+    };
+
+    if(!db.procedures) db.procedures = [];
+    db.procedures.push(proc);
+    saveDB();
+    closeAddProcModal();
+    window._pendingProcFile = null;
+    // Re-render current view
+    updateProcsSidebarCount();
+    if(currentOT) renderTab();
+    else renderProceduresLibrary();
+  } catch(err) {
+    alert('Error al guardar: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar';
+  }
+}
+
+async function openF07(id, filename) {
+  try {
+    const record = await idbGet(id);
+    if(!record) { alert('Archivo no encontrado. Volvé a cargar el F-07.'); return; }
+    const bytes = Uint8Array.from(atob(record.data), c => c.charCodeAt(0));
+    const mime = record.mimeType || 'application/octet-stream';
+    const blob = new Blob([bytes], {type: mime});
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch(e) { alert('Error al abrir: ' + e.message); }
+}
+
+async function downloadProc(id) {
+  const proc = (db.procedures||[]).find(p => p.id === id);
+  if(!proc) return;
+  try {
+    const record = await idbGet(id);
+    if(!record) { alert('Archivo no encontrado. Es posible que haya sido cargado en otro navegador.'); return; }
+    const bytes = Uint8Array.from(atob(record.data), c => c.charCodeAt(0));
+    const blob = new Blob([bytes], {type: proc.mimeType});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = proc.filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) { alert('Error al descargar: ' + e.message); }
+}
+
+function printGeneratedDoc() {
+  const btn = document.getElementById('btn-dl');
+  if(!btn || !btn.href || btn.href === '#') return;
+  const win = window.open(btn.href, '_blank');
+  if(win) win.addEventListener('load', () => { try{ win.print(); } catch(e){} });
+}
+
+async function printProc(id) {
+  const proc = (db.procedures||[]).find(p => p.id === id);
+  if(!proc) return;
+  try {
+    const record = await idbGet(id);
+    if(!record) { alert('Archivo no encontrado.'); return; }
+    const bytes = Uint8Array.from(atob(record.data), c => c.charCodeAt(0));
+    const blob = new Blob([bytes], {type: proc.mimeType});
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if(win) { win.addEventListener('load', () => { try{ win.print(); } catch(e){} }); }
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
+  } catch(e) { alert('Error al imprimir: ' + e.message); }
+}
+
+async function deleteProc(id) {
+  if(!confirm('¿Eliminar este procedimiento de la biblioteca?')) return;
+  db.procedures = (db.procedures||[]).filter(p => p.id !== id);
+  saveDB();
+  try { await idbDelete(id); } catch(e) { console.warn('IDB delete:', e); }
+  updateProcsSidebarCount();
+  if(currentOT) renderTab();
+  else renderProceduresLibrary();
+}
+
+// ── Modals ───────────────────────────────────────────────────────────────────────
+function closeModal(id){document.getElementById(id).style.display='none';}
+function closeModalIf(e,id){if(e.target.id===id)closeModal(id);}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+loadDB();
+renderSidebar();
+// Pull latest from cloud in background, then refresh UI
+syncFromCloud().then(ok => {
+  if(ok){ renderSidebar(); if(currentOT){ const o=db.ots.find(x=>x.id===currentOT); if(o) renderOT(); else { currentOT=null; } } }
+});
+// Keyboard shortcut: ESC closes modals
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    ['modal-new-ot','modal-edit-ot'].forEach(id=>{
+      const m=document.getElementById(id);if(m) m.style.display='none';
+    });
+  }
+});
+</script>
+<!-- Modal: Agregar ítem personalizado -->
+<div class="modal-overlay" id="modal-custom-item" style="display:none" onclick="if(event.target.id==='modal-custom-item')closeAddCustomModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:440px">
+    <div class="modal-title">Nuevo ensayo / prueba</div>
+    <p style="font-size:13px;color:var(--text3);margin-bottom:14px">Se agregará como carátula separadora entre los ensayos y el tratamiento superficial.</p>
+    <div class="field full" style="margin-bottom:12px">
+      <label>Nombre del ítem</label>
+      <input type="text" id="custom-item-input" placeholder="Ej: PRUEBA NEUMÁTICA" style="text-transform:uppercase"
+        onkeydown="if(event.key==='Enter')saveCustomItem()">
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)">
+      <input type="checkbox" id="custom-item-save-lib" checked style="width:15px;height:15px;accent-color:var(--accent)">
+      <label for="custom-item-save-lib" style="font-size:13px;color:var(--text2);cursor:pointer;text-transform:none;letter-spacing:0">
+        Guardar en biblioteca para reutilizar en otras OTs
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeAddCustomModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveCustomItem()">Agregar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Biblioteca de ítems -->
+<div class="modal-overlay" id="modal-library" style="display:none" onclick="if(event.target.id==='modal-library')closeLibraryModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:480px">
+    <div class="modal-title">Biblioteca de ensayos</div>
+    <p style="font-size:13px;color:var(--text3);margin-bottom:12px">Seleccioná los ítems que querés agregar a esta OT.</p>
+    <div style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto" id="library-items-list"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeLibraryModal()">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Cargar procedimiento -->
+<div class="modal-overlay" id="modal-add-proc" style="display:none" onclick="if(event.target.id==='modal-add-proc')closeAddProcModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:460px">
+    <div class="modal-title">Cargar procedimiento</div>
+    <p style="font-size:13px;color:var(--text3);margin-bottom:16px">
+      Se guardará en la biblioteca y se asociará automáticamente a las OTs que tengan el ensayo correspondiente.
+    </p>
+    <div class="fields">
+      <div class="field full" id="single-file-name">
+        <label>Nombre del procedimiento</label>
+        <input type="text" id="proc-name-input" placeholder="Ej: Procedimiento de Líquidos Penetrantes">
+      </div>
+      <div class="field full" id="single-file-type">
+        <label>Tipo de ensayo</label>
+        <select id="proc-type-select" onchange="onProcTypeChange(this.value)">
+          <optgroup label="Procedimientos de Ensayos">
+            <option>Líquidos Penetrantes</option>
+            <option>Radiografía / Gammagrafía</option>
+            <option>Ultrasonido</option>
+            <option>Visual de Soldaduras</option>
+            <option>Dimensional</option>
+            <option>Prueba Hidráulica</option>
+            <option>Prueba Neumática</option>
+          </optgroup>
+          <optgroup label="Pintura / Tratamiento Superficial">
+            <option>Pintura</option>
+            <option>Galvanizado</option>
+            <option>Decapado y Pasivado</option>
+          </optgroup>
+          <optgroup label="Soldadura">
+            <option>WPS / Soldadura</option>
+          </optgroup>
+          <option disabled style="color:var(--border)">──────────</option>
+          <option value="__custom__">+ Nuevo tipo personalizado...</option>
+        </select>
+      </div>
+      <div class="field full" id="custom-type-field" style="display:none">
+        <label>Nombre del tipo personalizado</label>
+        <input type="text" id="custom-type-input" placeholder="Ej: PRUEBA DE ESTANQUEIDAD"
+          oninput="this.value=this.value.toUpperCase()"
+          onkeydown="if(event.key==='Enter')document.getElementById('custom-type-kw').focus()">
+        <label style="margin-top:10px">Palabras clave de detección</label>
+        <input type="text" id="custom-type-kw"
+          placeholder="Ej: ESTANQUEIDAD, HIDROSTATICA, HIDRAULICA"
+          oninput="this.value=this.value.toUpperCase()"
+          onkeydown="if(event.key==='Enter')confirmCustomType()">
+        <div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.5">
+          Separadas por comas. Si el F-07 contiene alguna de estas palabras, el procedimiento se asignará automáticamente.
+          <br><span style="color:var(--accent);font-weight:500">Ejemplo:</span> ESTANQUEIDAD, HIDROSTATICA, HIDRAULICA, PRESION
+        </div>
+      </div>
+      <div class="field full">
+        <label>Archivos (PDF o Word)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-secondary" onclick="document.getElementById('proc-file-input').click()" style="flex-shrink:0">
+            📎 Seleccionar archivos
+          </button>
+          <span id="proc-file-label" style="font-size:13px;color:var(--text3)">
+            Ningún archivo seleccionado
+          </span>
+        </div>
+        <input type="file" id="proc-file-input" accept=".pdf,.doc,.docx" multiple style="display:none">
+        <div id="proc-files-list" style="display:none;margin-top:10px;display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeAddProcModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveProc()" id="btn-save-proc">Guardar</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
