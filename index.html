@@ -1230,7 +1230,7 @@ function dzDrop(e){
 async function loadF07file(file){
   if(!file) return;
   const statusEl=document.getElementById('f07-status');
-  statusEl.textContent='Leyendo F-07...';
+  if(statusEl) statusEl.textContent='Leyendo F-07...';
   try{
     const arrayBuffer=await file.arrayBuffer();
     const bytes=new Uint8Array(arrayBuffer);
@@ -1280,13 +1280,13 @@ async function loadF07file(file){
     }
 
     if(!text.trim()){
-      statusEl.textContent='⚠️ No se pudo leer el contenido del archivo.';
+      if(statusEl) statusEl.textContent='⚠️ No se pudo leer el contenido del archivo.';
       return;
     }
     window._lastF07ArrayBuffer = arrayBuffer;
     processF07(text,file.name);
   }catch(err){
-    statusEl.textContent='Error al leer el archivo: '+err.message;
+    if(statusEl) statusEl.textContent='Error al leer el archivo: '+err.message;
     console.error(err);
   }
 }
@@ -1400,7 +1400,7 @@ function processF07(text,filename){
     if(el) el.value=ot[field]||'';
   });
   const statusEl=document.getElementById('f07-status');
-  statusEl.textContent=`✅ ${detectedItems.length} estándar` + ((ot.customItems||[]).length>0?` + ${(ot.customItems||[]).length} adicionales`:'') + ` detectados.`;
+  if(statusEl) statusEl.textContent=`✅ ${detectedItems.length} estándar` + ((ot.customItems||[]).length>0?` + ${(ot.customItems||[]).length} adicionales`:'') + ` detectados.`;
   // Refresh sidebar, show datos tab first so user sees the loaded fields
   renderSidebar();
   setTimeout(()=>{
