@@ -532,6 +532,53 @@ async function pushOT(ot) {
     if(!r.ok) console.error('[pushOT]', r.status, await r.text());
   } catch(e) { console.error('[pushOT]', e); }
 }
+
+// Map procedure category → Supabase table name
+function procTableFor(type) {
+  const cat = (typeof procCategory==='function') ? procCategory(type) : '';
+  if(cat === 'Procedimiento de Soldadura (WPS/PQR)') return 'procedures_wps';
+  if(cat === 'Procedimiento de Pintura / Tratamiento Superficial') return 'procedures_sup';
+  return 'procedures_end';
+}
+
+// Push a single procedure to its category table
+async function pushProc(p) {
+  if(!syncEnabled || !p) return;
+  try {
+    const table = procTableFor(p.type);
+    const row = {
+      id: p.id, name: p.name, type: p.type, file_type: p.fileType||'',
+      filename: p.filename||'', date: p.date||'', mime_type: p.mimeType||'',
+      updated_at: new Date().toISOString()
+    };
+    const r = await fetch(SUPA_URL + '/rest/v1/' + table + '?on_conflict=id', {
+      method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body: JSON.stringify(row)
+    });
+    if(!r.ok) console.error('[pushProc]', table, r.status, await r.text());
+  } catch(e) { console.error('[pushProc]', e); }
+}
+
+// Delete a procedure from its category table
+async function deleteProcFromCloud(p) {
+  if(!syncEnabled || !p) return;
+  try {
+    const table = procTableFor(p.type);
+    await fetch(SUPA_URL + '/rest/v1/' + table + '?id=eq.' + p.id, {method:'DELETE', headers: supaHeaders()});
+  } catch(e) {}
+}
+
+// Push library (custom items + custom types) immediately
+async function pushLibrary() {
+  if(!syncEnabled) return;
+  try {
+    const libData = { customLibrary: db.customLibrary||[], customProcTypes: db.customProcTypes||[] };
+    await fetch(SUPA_URL + '/rest/v1/library?on_conflict=id', {
+      method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body: JSON.stringify({id:'main', data: libData, updated_at: new Date().toISOString()})
+    });
+  } catch(e) { console.error('[pushLibrary]', e); }
+}
 let syncTimeout = null;
 let syncEnabled = true;
 
@@ -581,18 +628,23 @@ function syncToCloud(delay) {
         });
         if(!r.ok) throw new Error('ots ' + r.status + ': ' + (await r.text()).slice(0,80));
       }
-      // Upsert all procedures (metadata only)
-      const procRows = (db.procedures||[]).map(p => ({
-        id: p.id, name: p.name, type: p.type, file_type: p.fileType||'',
-        filename: p.filename||'', date: p.date||'', mime_type: p.mimeType||'',
-        updated_at: new Date().toISOString()
-      }));
-      if(procRows.length) {
-        const r = await fetch(SUPA_URL + '/rest/v1/procedures?on_conflict=id', {
-          method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
-          body: JSON.stringify(procRows)
+      // Upsert procedures grouped by category table
+      const byTable = {procedures_end:[], procedures_sup:[], procedures_wps:[]};
+      (db.procedures||[]).forEach(p => {
+        const t = procTableFor(p.type);
+        byTable[t].push({
+          id: p.id, name: p.name, type: p.type, file_type: p.fileType||'',
+          filename: p.filename||'', date: p.date||'', mime_type: p.mimeType||'',
+          updated_at: new Date().toISOString()
         });
-        if(!r.ok) throw new Error('procedures ' + r.status + ': ' + (await r.text()).slice(0,80));
+      });
+      for(const [table, rows] of Object.entries(byTable)) {
+        if(!rows.length) continue;
+        const r = await fetch(SUPA_URL + '/rest/v1/' + table + '?on_conflict=id', {
+          method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+          body: JSON.stringify(rows)
+        });
+        if(!r.ok) throw new Error(table + ' ' + r.status + ': ' + (await r.text()).slice(0,80));
       }
       // Upsert library (custom items + custom proc types) as single row
       const libData = {
@@ -624,9 +676,12 @@ async function syncFromCloud() {
     if(!rOts.ok) throw new Error('ots HTTP ' + rOts.status);
     const otRows = await rOts.json();
 
-    // Fetch procedures
-    const rProcs = await fetch(SUPA_URL + '/rest/v1/procedures?select=*', {headers: supaHeaders()});
-    const procRows = rProcs.ok ? await rProcs.json() : [];
+    // Fetch procedures from all 3 category tables
+    let procRows = [];
+    for(const table of ['procedures_end','procedures_sup','procedures_wps']) {
+      const rp = await fetch(SUPA_URL + '/rest/v1/' + table + '?select=*', {headers: supaHeaders()});
+      if(rp.ok) procRows = procRows.concat(await rp.json());
+    }
 
     // Fetch library
     const rLib = await fetch(SUPA_URL + '/rest/v1/library?id=eq.main&select=data', {headers: supaHeaders()});
@@ -2751,8 +2806,10 @@ async function saveMultipleProcs() {
       b64 = btoa(b64);
       await idbSave(procId, b64, mimeType, file.name);
       if(!db.procedures) db.procedures = [];
-      db.procedures.push({ id: procId, name, type, fileType, filename: file.name,
-        date: new Date().toLocaleDateString('es-AR'), mimeType });
+      const newProc = { id: procId, name, type, fileType, filename: file.name,
+        date: new Date().toLocaleDateString('es-AR'), mimeType };
+      db.procedures.push(newProc);
+      pushProc(newProc);
       saved++;
     } catch(e) {
       console.error('Error saving', file.name, e);
@@ -2820,6 +2877,7 @@ async function saveProc() {
     if(!db.procedures) db.procedures = [];
     db.procedures.push(proc);
     saveDB();
+    pushProc(proc);
     closeAddProcModal();
     window._pendingProcFile = null;
     // Re-render current view
@@ -2887,8 +2945,10 @@ async function printProc(id) {
 
 async function deleteProc(id) {
   if(!confirm('¿Eliminar este procedimiento de la biblioteca?')) return;
+  const proc = (db.procedures||[]).find(p => p.id === id);
   db.procedures = (db.procedures||[]).filter(p => p.id !== id);
   saveDB();
+  if(proc) deleteProcFromCloud(proc);
   try { await idbDelete(id); } catch(e) { console.warn('IDB delete:', e); }
   updateProcsSidebarCount();
   if(currentOT) renderTab();
