@@ -37,8 +37,15 @@ async function idbGet(id) {
     if(local) return local;
   } catch(e) {}
   // Fallback: download from cloud
-  const proc = (db.procedures||[]).find(p=>p.id===id)
+  let proc = (db.procedures||[]).find(p=>p.id===id)
     || (db.ots||[]).flatMap(o=>(o.f07s||[])).find(f=>f.id===id);
+  // También buscar en archivos de WPQ (calificaciones de soldadores)
+  if(!proc) {
+    for(const e of (db.wpq||[])) {
+      const wf = (e.files||[]).find(f => f.id === id);
+      if(wf) { proc = wf; break; }
+    }
+  }
   const filename = (proc && (proc.filename||proc.name)) || (id + '.pdf');
   const rec = await supaDownloadFile(id, filename);
   if(rec) {
@@ -65,6 +72,7 @@ function loadDB(){
   if(!db.customLibrary) db.customLibrary=[];
   if(!db.procedures) db.procedures=[];
   if(!db.wpq) db.wpq=[];
+  if(!db.vencimientos) db.vencimientos=[];
   // Strip any leftover file data from localStorage (migration)
   db.procedures.forEach(p => { delete p.data; });
   if(!db.customProcTypes) db.customProcTypes = [];

@@ -112,7 +112,8 @@ function renderWPQ() {
   if(titleEl) titleEl.textContent = 'WPQ — Calificación de soldadores';
 
   if(wpqNav.level === 'pst') {
-    if(actionsEl) actionsEl.innerHTML = '';
+    if(actionsEl) actionsEl.innerHTML =
+      `<button class="btn btn-secondary btn-sm" onclick="document.getElementById('venc-excel-input').click()">📊 Importar vencimientos (Excel)</button>`;
     renderWPQpstLevel();
   } else if(wpqNav.level === 'soldadores') {
     if(actionsEl) actionsEl.innerHTML =
@@ -156,10 +157,15 @@ function renderWPQpstLevel() {
   }
 
   main.innerHTML = `<div class="fade-in">
+    <div style="position:sticky;top:0;z-index:5;background:var(--bg);padding-bottom:12px;margin-bottom:4px">
+      ${vencimientosBannerHTML()}
+    </div>
     <div style="margin-bottom:16px;color:var(--text2);font-size:13px">
       Una carpeta por cada WPS cargado (por número PST). Hacé click para ver y cargar los soldadores calificados.
     </div>
     ${cards}
+    <input type="file" id="venc-excel-input" accept=".xls,.xlsx" style="display:none"
+      onchange="if(this.files[0]) importVencimientosExcel(this.files[0])">
   </div>`;
 }
 
@@ -232,9 +238,33 @@ function renderWPQarchivosLevel() {
 
   const isInactivos = /^inactivos?$/i.test((entry.soldador||'').trim());
 
+  // Estado de vencimiento actual de este soldador para este PST
+  let vencInfo = '';
+  let revalBtn = '';
+  if(!isInactivos) {
+    const regs = (db.vencimientos||[]).filter(v =>
+      v.pst === entry.pst &&
+      (v.soldador||'').toLowerCase() === (entry.soldador||'').toLowerCase());
+    if(regs.length) {
+      const partes = regs.map(v => {
+        const e = vencEstado(v);
+        const color = e==='vencido'?'var(--red)':(e==='porvencer'?'var(--amber)':'var(--green)');
+        const txt = e==='vencido'?'vencido':(e==='porvencer'?'vence este mes':'vigente');
+        const fecha = (v.mes&&v.anio)?` (${String(v.mes).padStart(2,'0')}/${v.anio})`:'';
+        return `<span style="color:${color}">${v.posicion||'—'}: ${txt}${fecha}</span>`;
+      }).join(' · ');
+      vencInfo = `<div style="font-size:11px;margin-top:4px">${partes}</div>`;
+    }
+    revalBtn = `<button class="btn btn-primary btn-sm" onclick="revalidarSoldador('${escAttr(entry.soldador)}','${escAttr(entry.pst)}')" style="margin-left:auto">↻ Revalidar</button>`;
+  }
+
   const bc = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
     <button class="btn btn-secondary btn-sm" onclick="wpqBack()">← Volver</button>
-    <span style="font-size:13px;color:var(--text2)">WPQ / PST ${esc(entry.pst)} / <strong style="color:var(--text)">${esc(entry.soldador)}</strong></span>
+    <div style="min-width:0">
+      <span style="font-size:13px;color:var(--text2)">WPQ / PST ${esc(entry.pst)} / <strong style="color:var(--text)">${esc(entry.soldador)}</strong></span>
+      ${vencInfo}
+    </div>
+    ${revalBtn}
   </div>`;
 
   const hint = isInactivos
@@ -556,4 +586,237 @@ function wpqBlockForOT(pstNum) {
 // Helper de escape de atributos (por si no existe en utils)
 function escAttr(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+}
+
+// ════════════════════════════════════════════════════════════
+// VENCIMIENTOS — import de Excel, resumen y revalidación
+// ════════════════════════════════════════════════════════════
+
+// Parsea "14/08 (2G)" → { pst:"14-08", pos:"2G" }
+function parsePSTposicion(wps) {
+  const m = String(wps||'').match(/(\d{1,2})\s*[\/\-]\s*(\d{2,4})\s*\(?\s*([0-9][GgFf])?\s*\)?/);
+  if(!m) return { pst: null, pos: '' };
+  return { pst: m[1] + '-' + m[2], pos: (m[3]||'').toUpperCase() };
+}
+
+// Sube un registro de vencimiento a la nube
+async function pushVencimiento(v) {
+  if(!syncEnabled || !v) return;
+  try {
+    const row = { id: v.id, soldador: v.soldador, pst: v.pst, posicion: v.posicion||'',
+      mes: v.mes||null, anio: v.anio||null, estado: v.estado||'', updated_at: new Date().toISOString() };
+    const r = await fetch(SUPA_URL + '/rest/v1/vencimientos?on_conflict=id', {
+      method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body: JSON.stringify(row)
+    });
+    if(!r.ok) console.error('[pushVencimiento]', r.status, await r.text());
+  } catch(e) { console.error('[pushVencimiento]', e); }
+}
+
+// Sube todos los vencimientos en lote
+async function pushAllVencimientos() {
+  if(!syncEnabled || !(db.vencimientos||[]).length) return;
+  try {
+    const rows = db.vencimientos.map(v => ({
+      id: v.id, soldador: v.soldador, pst: v.pst, posicion: v.posicion||'',
+      mes: v.mes||null, anio: v.anio||null, estado: v.estado||'', updated_at: new Date().toISOString()
+    }));
+    const r = await fetch(SUPA_URL + '/rest/v1/vencimientos?on_conflict=id', {
+      method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body: JSON.stringify(rows)
+    });
+    if(!r.ok) console.error('[pushAllVencimientos]', r.status, await r.text());
+  } catch(e) { console.error('[pushAllVencimientos]', e); }
+}
+
+// Importa el Excel de vencimientos (lee hoja "vencimientos")
+async function importVencimientosExcel(file) {
+  if(!file) return;
+  if(typeof XLSX === 'undefined') { alert('No se pudo cargar el lector de Excel. Recargá la página.'); return; }
+  setSyncStatus('syncing', 'Leyendo Excel…');
+  try {
+    const ab = await file.arrayBuffer();
+    const wb = XLSX.read(ab, { type: 'array' });
+    // Buscar la hoja "vencimientos" (case-insensitive)
+    const sheetName = wb.SheetNames.find(n => /vencimiento/i.test(n)) || wb.SheetNames[0];
+    const sh = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sh, { header: 1, defval: '' });
+
+    // Encontrar la fila de encabezado (donde col0 = "APELLIDO Y NOMBRE")
+    let headerRow = -1;
+    for(let i=0; i<rows.length; i++) {
+      if(String(rows[i][0]||'').toUpperCase().includes('APELLIDO')) { headerRow = i; break; }
+    }
+    if(headerRow < 0) { alert('No encontré la fila de encabezados (APELLIDO Y NOMBRE) en la hoja.'); setSyncStatus('idle'); return; }
+
+    // Columnas: 0=nombre, 4=WPS Nº, 8..19=meses 1..12, 20=AÑO, 21=ESTADO
+    const nuevos = [];
+    let lastNombre = '';
+    for(let i=headerRow+1; i<rows.length; i++) {
+      const row = rows[i];
+      let nombre = String(row[0]||'').trim();
+      if(nombre) lastNombre = nombre; else nombre = lastNombre; // arrastrar nombre si está vacío
+      const wps = String(row[4]||'').trim();
+      if(!wps) continue;
+      const estado = String(row[21]||'').trim().toUpperCase();
+      // mes: buscar X en columnas 8..19
+      let mes = null;
+      for(let c=8; c<=19; c++) {
+        if(String(row[c]||'').trim().toUpperCase().includes('X')) { mes = c - 7; break; }
+      }
+      let anio = null;
+      const av = row[20];
+      if(av !== '' && av != null) { const n = parseInt(av,10); if(!isNaN(n)) anio = n; }
+      const { pst, pos } = parsePSTposicion(wps);
+      if(!pst) continue;
+      nuevos.push({
+        id: 'venc_' + pst + '_' + (pos||'NA') + '_' + nombre.replace(/[^A-Za-z0-9]/g,'').slice(0,20),
+        soldador: nombre, pst, posicion: pos, mes, anio, estado
+      });
+    }
+
+    if(nuevos.length === 0) { alert('No se encontraron filas de vencimientos.'); setSyncStatus('idle'); return; }
+
+    // Reemplazar la base de vencimientos con lo importado
+    db.vencimientos = nuevos;
+    saveDB();
+    pushAllVencimientos();
+    setSyncStatus('ok', 'Importado');
+    setTimeout(()=>setSyncStatus('idle'), 2000);
+    alert(`✓ Importados ${nuevos.length} registros de vencimiento.`);
+    renderWPQ();
+  } catch(e) {
+    console.error('[importVencimientosExcel]', e);
+    setSyncStatus('error', 'Error');
+    alert('Error al leer el Excel: ' + e.message);
+  }
+}
+
+// Calcula el estado de vencimiento de un registro ACTIVO respecto a hoy
+// Devuelve: 'vencido' | 'porvencer' | 'vigente' | null (si no aplica)
+function vencEstado(v) {
+  if((v.estado||'').toUpperCase() !== 'ACTIVO') return null; // solo ACTIVO importa
+  if(!v.mes || !v.anio) return null;
+  const hoy = new Date();
+  const mesHoy = hoy.getMonth() + 1, anioHoy = hoy.getFullYear();
+  // vencido si el año/mes ya pasó completamente (antes del mes actual)
+  if(v.anio < anioHoy || (v.anio === anioHoy && v.mes < mesHoy)) return 'vencido';
+  // por vencer si vence este mes actual
+  if(v.anio === anioHoy && v.mes === mesHoy) return 'porvencer';
+  return 'vigente';
+}
+
+// Lista de vencidos y por vencer (solo ACTIVO)
+function vencimientosResumen() {
+  const vencidos = [], porvencer = [];
+  (db.vencimientos||[]).forEach(v => {
+    const e = vencEstado(v);
+    if(e === 'vencido') vencidos.push(v);
+    else if(e === 'porvencer') porvencer.push(v);
+  });
+  const ordena = (a,b) => (a.soldador||'').localeCompare(b.soldador||'');
+  vencidos.sort(ordena); porvencer.sort(ordena);
+  return { vencidos, porvencer };
+}
+
+// HTML del resumen fijo (sticky) de vencimientos
+function vencimientosBannerHTML() {
+  const { vencidos, porvencer } = vencimientosResumen();
+  const fmtNombre = (s) => {
+    // "ALDERETE, DANIEL" → "Alderete, Daniel" (capitalizado simple)
+    return String(s||'').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  };
+  const chip = (v, color, bg) =>
+    `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:${bg};color:${color};border:1px solid ${color}33;padding:3px 9px;border-radius:12px;white-space:nowrap">
+      ${esc(fmtNombre(v.soldador))} · PST ${esc(v.pst)}${v.posicion?(' · '+esc(v.posicion)):''}
+    </span>`;
+
+  if(vencidos.length === 0 && porvencer.length === 0) {
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="var(--green)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+      Sin vencimientos pendientes. Todas las calificaciones activas están vigentes.
+    </div>`;
+  }
+
+  let html = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:11px 14px">`;
+  if(vencidos.length) {
+    html += `<div style="margin-bottom:${porvencer.length?'9px':'0'}">
+      <div style="font-size:11px;font-weight:600;color:var(--red);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--red)"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+        Vencidos (${vencidos.length})
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${vencidos.map(v=>chip(v,'var(--red)','var(--red-light)')).join('')}</div>
+    </div>`;
+  }
+  if(porvencer.length) {
+    html += `<div>
+      <div style="font-size:11px;font-weight:600;color:var(--amber);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--amber)"><path d="M11 7h2v6h-2zm0 8h2v2h-2zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>
+        Por vencer este mes (${porvencer.length})
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${porvencer.map(v=>chip(v,'var(--amber)','var(--amber-light)')).join('')}</div>
+    </div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+// Revalidar desde la vista del soldador: maneja una o varias posiciones del PST
+function revalidarSoldador(soldador, pst) {
+  const regs = (db.vencimientos||[]).filter(v =>
+    v.pst === pst && (v.soldador||'').toLowerCase() === (soldador||'').toLowerCase());
+
+  let pos = '';
+  if(regs.length > 1) {
+    const opciones = regs.map((v,i) => `${i+1}. Posición ${v.posicion||'(sin pos)'}`).join('\n');
+    const sel = prompt(`Este soldador tiene varias posiciones para el PST ${pst}.\n¿Cuál revalidás?\n\n${opciones}\n\nEscribí el número (o "todas"):`);
+    if(sel === null) return;
+    if(/^todas?$/i.test(sel.trim())) {
+      // Revalidar todas con el mismo nuevo vencimiento
+      const nuevo = prompt(`Nuevo vencimiento para TODAS las posiciones del PST ${pst} (MM/AAAA, ej: 06/2027):`);
+      if(!nuevo) return;
+      const m = nuevo.match(/(\d{1,2})\s*[\/\-]\s*(\d{4})/);
+      if(!m) { alert('Formato inválido. Usá MM/AAAA.'); return; }
+      const mes = parseInt(m[1],10), anio = parseInt(m[2],10);
+      if(mes<1||mes>12){ alert('Mes inválido.'); return; }
+      regs.forEach(v => { v.mes=mes; v.anio=anio; v.estado='ACTIVO'; pushVencimiento(v); });
+      saveDB(); renderWPQ();
+      alert('✓ Revalidadas todas las posiciones.');
+      return;
+    }
+    const n = parseInt(sel.trim(),10);
+    if(isNaN(n) || n<1 || n>regs.length) { alert('Opción inválida.'); return; }
+    pos = regs[n-1].posicion || '';
+  } else if(regs.length === 1) {
+    pos = regs[0].posicion || '';
+  }
+
+  const ok = revalidarSoldadorPST(soldador, pst, pos);
+  if(ok) { renderWPQ(); alert('✓ Revalidado.'); }
+}
+
+// Revalidar: actualiza el vencimiento de un soldador+PST a nuevo mes/año
+function revalidarSoldadorPST(soldador, pst, pos) {
+  const nuevo = prompt(`Revalidación de ${soldador} — PST ${pst}${pos?(' ('+pos+')'):''}\n\nIngresá el nuevo vencimiento como MM/AAAA (ej: 06/2027):`);
+  if(!nuevo) return false;
+  const m = nuevo.match(/(\d{1,2})\s*[\/\-]\s*(\d{4})/);
+  if(!m) { alert('Formato inválido. Usá MM/AAAA, ej: 06/2027.'); return false; }
+  const mes = parseInt(m[1],10), anio = parseInt(m[2],10);
+  if(mes<1||mes>12) { alert('El mes debe estar entre 1 y 12.'); return false; }
+
+  // Buscar registro existente
+  let v = (db.vencimientos||[]).find(x =>
+    x.pst === pst && (x.posicion||'') === (pos||'') &&
+    (x.soldador||'').toLowerCase() === (soldador||'').toLowerCase());
+  if(v) {
+    v.mes = mes; v.anio = anio; v.estado = 'ACTIVO';
+  } else {
+    v = { id:'venc_'+pst+'_'+(pos||'NA')+'_'+soldador.replace(/[^A-Za-z0-9]/g,'').slice(0,20),
+          soldador, pst, posicion: pos||'', mes, anio, estado:'ACTIVO' };
+    if(!db.vencimientos) db.vencimientos = [];
+    db.vencimientos.push(v);
+  }
+  pushVencimiento(v);
+  saveDB();
+  return true;
 }

@@ -185,6 +185,13 @@ async function syncFromCloud() {
       if(rw.ok) wpqRows = await rw.json();
     } catch(e) {}
 
+    // Fetch vencimientos (de soldadores por PST)
+    let vencRows = [];
+    try {
+      const rv = await fetch(SUPA_URL + '/rest/v1/vencimientos?select=*', {headers: supaHeaders()});
+      if(rv.ok) vencRows = await rv.json();
+    } catch(e) {}
+
     // Fetch library
     const rLib = await fetch(SUPA_URL + '/rest/v1/library?id=eq.main&select=data', {headers: supaHeaders()});   const libRows = rLib.ok ? await rLib.json() : [];
 
@@ -207,6 +214,10 @@ async function syncFromCloud() {
       }));
       db.wpq = wpqRows.map(r => ({
         id: r.id, pst: r.pst, soldador: r.soldador, files: r.files || []
+      }));
+      db.vencimientos = vencRows.map(r => ({
+        id: r.id, soldador: r.soldador, pst: r.pst, posicion: r.posicion,
+        mes: r.mes, anio: r.anio, estado: r.estado
       }));
       if(libRows.length && libRows[0].data) {
         db.customLibrary = libRows[0].data.customLibrary || [];
