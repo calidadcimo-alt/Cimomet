@@ -100,6 +100,8 @@ function wpqSoldadoresForWPSNum(pstNum) {
 function showWPQView() {
   currentOT = null;
   currentTab = 'datos';
+  currentScreen = 'wpq';
+  if(typeof updateHomeButton==='function') updateHomeButton();
   document.querySelectorAll('.ot-item').forEach(el => el.classList.remove('active'));
   document.getElementById('sidebar-proc-wpq')?.classList.add('active');
   wpqNav = { level: 'pst', pst: null, soldador: null };
@@ -113,7 +115,8 @@ function renderWPQ() {
 
   if(wpqNav.level === 'pst') {
     if(actionsEl) actionsEl.innerHTML =
-      `<button class="btn btn-secondary btn-sm" onclick="document.getElementById('venc-excel-input').click()">📊 Importar vencimientos (Excel)</button>`;
+      `<button class="btn btn-secondary btn-sm" onclick="showProceduresMenu()">← Procedimientos</button>
+       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('venc-excel-input').click()">📊 Importar vencimientos (Excel)</button>`;
     renderWPQpstLevel();
   } else if(wpqNav.level === 'soldadores') {
     if(actionsEl) actionsEl.innerHTML =

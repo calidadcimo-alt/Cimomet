@@ -118,7 +118,8 @@ let currentProcSection = 'END'; // which submenu is active
 function showProceduresView(section) {
   if(section) currentProcSection = section;
   currentOT = null;
-  currentTab = 'datos';
+  currentScreen = 'procview';
+  if(typeof updateHomeButton==='function') updateHomeButton();
   document.querySelectorAll('.ot-item').forEach(el => el.classList.remove('active'));
   const activeId = SIDEBAR_IDS[currentProcSection];
   if(activeId) document.getElementById(activeId)?.classList.add('active');
@@ -130,7 +131,8 @@ function showProceduresView(section) {
   };
   document.getElementById('topbar-title').textContent = titles[currentProcSection] || 'Procedimientos';
   document.getElementById('topbar-actions').innerHTML =
-    `<button class="btn btn-primary btn-sm" onclick="openAddProcModal()">+ Cargar procedimiento</button>`;
+    `<button class="btn btn-secondary btn-sm" onclick="showProceduresMenu()">← Procedimientos</button>
+     <button class="btn btn-primary btn-sm" onclick="openAddProcModal()">+ Cargar procedimiento</button>`;
   renderProceduresLibrary();
 }
 

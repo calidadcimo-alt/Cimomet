@@ -13,83 +13,24 @@
 <body>
 
 <div class="app">
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="sidebar-top">
-      <div class="brand">CIMOMET <span>SA</span></div>
-      <div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:2px">Gestión de Databooks · v25-sync</div>
-    </div>
-    <div class="sidebar-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:16px">
-      <span>Órdenes de Trabajo</span>
-    </div>
-    <div id="ot-list-sidebar"></div>
-    <div style="border-top:1px solid rgba(255,255,255,.1);margin-top:4px;padding:8px 0 0">
-      <div class="sidebar-label" style="padding:8px 20px 6px">Procedimientos</div>
-      <div class="ot-item" id="sidebar-proc-end" onclick="showProceduresView('END')"
-           style="padding:8px 20px;border-radius:0;border-left:3px solid transparent">
-        <svg width="13" height="13" fill="rgba(255,255,255,.5)" viewBox="0 0 24 24" style="flex-shrink:0">
-          <path d="M19.5 12c0-1.93-1.57-3.5-3.5-3.5S12.5 10.07 12.5 12s1.57 3.5 3.5 3.5 3.5-1.57 3.5-3.5zm-10 0c0-1.93-1.57-3.5-3.5-3.5S2.5 10.07 2.5 12s1.57 3.5 3.5 3.5 3.5-1.57 3.5-3.5zM12 1C5.93 1 1 5.93 1 12s4.93 11 11 11 11-4.93 11-11S18.07 1 12 1zm0 20c-4.96 0-9-4.04-9-9s4.04-9 9-9 9 4.04 9 9-4.04 9-9 9z"/>
-        </svg>
-        <div style="min-width:0">
-          <div class="ot-num">END</div>
-          <div class="ot-meta" id="sidebar-count-end">Ensayos no destructivos</div>
-        </div>
-      </div>
-      <div class="ot-item" id="sidebar-proc-sup" onclick="showProceduresView('Tratamiento Superficial')"
-           style="padding:8px 20px;border-radius:0;border-left:3px solid transparent">
-        <svg width="13" height="13" fill="rgba(255,255,255,.5)" viewBox="0 0 24 24" style="flex-shrink:0">
-          <path d="M18 4V3c0-.55-.45-1-1-1H5c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1h12c.55 0 1-.45 1-1V6h1v4H9v11c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-9h8V4h-3z"/>
-        </svg>
-        <div style="min-width:0">
-          <div class="ot-num">Tratamiento Superficial</div>
-          <div class="ot-meta" id="sidebar-count-sup">Pintura y tratamientos</div>
-        </div>
-      </div>
-      <div class="ot-item" id="sidebar-proc-wps" onclick="showProceduresView('WPS y PQR')"
-           style="padding:8px 20px;border-radius:0;border-left:3px solid transparent">
-        <svg width="13" height="13" fill="rgba(255,255,255,.5)" viewBox="0 0 24 24" style="flex-shrink:0">
-          <path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7"/>
-        </svg>
-        <div style="min-width:0">
-          <div class="ot-num">WPS y PQR</div>
-          <div class="ot-meta" id="sidebar-count-wps">Soldadura</div>
-        </div>
-      </div>
-      <div class="ot-item" id="sidebar-proc-wpq" onclick="showWPQView()"
-           style="padding:8px 20px;border-radius:0;border-left:3px solid transparent">
-        <svg width="13" height="13" fill="rgba(255,255,255,.5)" viewBox="0 0 24 24" style="flex-shrink:0">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-        </svg>
-        <div style="min-width:0">
-          <div class="ot-num">WPQ</div>
-          <div class="ot-meta" id="sidebar-count-wpq">Calificación de soldadores</div>
-        </div>
-      </div>
-    </div>
-    <button class="btn-new-ot" onclick="openNewOTModal()">
-      <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-      Nueva OT
-    </button>
-  </aside>
-
-  <!-- Main -->
+  <!-- Main (full width, no sidebar) -->
   <div class="main">
     <div class="topbar">
-      <div class="topbar-title" id="topbar-title">Panel de OTs</div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <span id="sync-status" style="font-size:11px;font-family:var(--mono);transition:color .2s;white-space:nowrap"></span>
-        <div class="topbar-actions" id="topbar-actions"></div>
+      <div class="topbar-inner">
+        <div style="display:flex;align-items:center;gap:14px;min-width:0">
+          <button id="btn-home" onclick="showHome()" class="btn-home" title="Ir al inicio">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+            <span>Inicio</span>
+          </button>
+          <div class="topbar-title" id="topbar-title">CIMOMET SA</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span id="sync-status" style="font-size:11px;font-family:var(--mono);transition:color .2s;white-space:nowrap"></span>
+          <div class="topbar-actions" id="topbar-actions"></div>
+        </div>
       </div>
     </div>
-    <div class="content" id="main-content">
-      <div class="empty fade-in">
-        <div class="empty-icon">📋</div>
-        <h3>Seleccioná o creá una OT</h3>
-        <p>Cada OT guarda sus propios F-07, datos e ítems del databook.</p>
-        <br>
-        <button class="btn btn-primary" onclick="openNewOTModal()">+ Nueva OT</button>
-      </div>
-    </div>
+    <div class="content" id="main-content"></div>
   </div>
 </div>
 
@@ -175,6 +116,7 @@
 <script src="js/procedimientos.js"></script>
 <script src="js/caratulas.js"></script>
 <script src="js/wpq.js"></script>
+<script src="js/nav.js"></script>
 <script src="js/app.js"></script>
 <!-- Modal: Agregar ítem personalizado -->
 <div class="modal-overlay" id="modal-custom-item" style="display:none" onclick="if(event.target.id==='modal-custom-item')closeAddCustomModal()">

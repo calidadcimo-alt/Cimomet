@@ -2,65 +2,7 @@
 // ots.js — Órdenes de Trabajo (sidebar, CRUD, datos)
 // ════════════════════════════════════════════════════════════
 
-function renderSidebar(){
-  const el = document.getElementById('ot-list-sidebar');
-  if(!db.ots.length){
-    el.innerHTML = '<div style="padding:12px 20px;font-size:12px;color:rgba(255,255,255,.55);opacity:.7">Sin OTs todavía</div>';
-    return;
-  }
-
-  const STATUS_GROUPS = [
-    { key: 'active',  label: 'En proceso',  dot: 'dot-active'  },
-    { key: 'pending', label: 'Pendiente',   dot: 'dot-pending' },
-    { key: 'done',    label: 'Terminada',   dot: 'dot-done'    },
-  ];
-
-  const grouped = {};
-  STATUS_GROUPS.forEach(g => grouped[g.key] = []);
-  db.ots.forEach(ot => {
-    const key = ot.estado || 'active';
-    if(!grouped[key]) grouped[key] = [];
-    grouped[key].push(ot);
-  });
-
-  el.innerHTML = STATUS_GROUPS.map(g => {
-    const ots = grouped[g.key];
-    if(!ots.length) return '';
-    const collapsed = window.sidebarCollapsed[g.key];
-    return `
-      <div>
-        <div onclick="toggleSidebarGroup('${g.key}')"
-          style="display:flex;align-items:center;justify-content:space-between;
-            padding:6px 20px 6px 16px;cursor:pointer;user-select:none;
-            color:rgba(255,255,255,.55);font-size:11px;font-weight:700;text-transform:uppercase;
-            letter-spacing:.06em;opacity:.85;
-            border-left:3px solid transparent">
-          <div style="display:flex;align-items:center;gap:7px">
-            <div class="ot-dot ${g.dot}" style="flex-shrink:0"></div>
-            ${g.label}
-            <span style="background:rgba(255,255,255,.15);border-radius:10px;
-              padding:1px 7px;font-size:10px;font-weight:400;letter-spacing:0">
-              ${ots.length}
-            </span>
-          </div>
-          <svg width="11" height="11" fill="rgba(255,255,255,.5)" viewBox="0 0 24 24"
-            style="transition:transform .2s;transform:rotate(${collapsed?'0':'-180'}deg);flex-shrink:0">
-            <path d="M7 10l5 5 5-5z"/>
-          </svg>
-        </div>
-        ${collapsed ? '' : ots.map(ot => `
-          <div class="ot-item ${currentOT===ot.id?'active':''}"
-            onclick="selectOT('${ot.id}')"
-            style="padding-left:28px">
-            <div style="min-width:0">
-              <div class="ot-num">OT ${ot.num}</div>
-              <div class="ot-meta">${ot.cliente||'Sin cliente'}</div>
-            </div>
-          </div>`).join('')}
-      </div>`;
-  }).join('');
-}
-
+// renderSidebar() ahora vive en nav.js (navegación por pantallas)
 function toggleSidebarGroup(key) {
   window.sidebarCollapsed[key] = !window.sidebarCollapsed[key];
   renderSidebar();
@@ -198,7 +140,8 @@ function createOT(){
 function selectOT(id){
   currentOT = id;
   currentTab = 'datos';
-  renderSidebar();
+  currentScreen = 'ot';
+  updateHomeButton();
   renderOT();
 }
 
@@ -217,16 +160,7 @@ function confirmDeleteOT(){
   db.ots = db.ots.filter(o=>o.id!==currentOT);
   currentOT = null;
   saveDB();
-  renderSidebar();
-  // Show empty state
-  document.getElementById('topbar-title').textContent='Panel de OTs';
-  document.getElementById('topbar-actions').innerHTML='';
-  document.getElementById('main-content').innerHTML=`
-    <div class="empty fade-in">
-      <div class="empty-icon">📋</div>
-      <h3>Seleccioná o creá una OT</h3>
-      <p>Cada OT guarda sus propios F-07, datos e ítems del databook.</p>
-    </div>`;
+  showOTList();
 }
 
 function openEditModal(){
@@ -260,16 +194,7 @@ function deleteCurrentOT(){
   db.ots = db.ots.filter(o=>o.id!==currentOT);
   saveDB(); closeModal('modal-edit-ot');
   currentOT=null;
-  renderSidebar();
-  document.getElementById('topbar-title').textContent='Panel de OTs';
-  document.getElementById('topbar-actions').innerHTML='';
-  document.getElementById('main-content').innerHTML=`
-    <div class="empty fade-in">
-      <div class="empty-icon">📋</div>
-      <h3>Seleccioná o creá una OT</h3>
-      <p>Cada OT guarda sus propios F-07, datos e ítems del databook.</p>
-      <br><button class="btn btn-primary" onclick="openNewOTModal()">+ Nueva OT</button>
-    </div>`;
+  showOTList();
 }
 
 // ── Render OT ────────────────────────────────────────────────────────────────
@@ -277,8 +202,11 @@ function deleteCurrentOT(){
 function renderOT(){
   const ot = db.ots.find(o=>o.id===currentOT);
   if(!ot) return;
+  currentScreen = 'ot';
+  if(typeof updateHomeButton==='function') updateHomeButton();
   document.getElementById('topbar-title').textContent=`OT ${ot.num} · ${ot.cliente}`;
   document.getElementById('topbar-actions').innerHTML=`
+    <button class="btn btn-secondary btn-sm" onclick="showOTList()">← OTs</button>
     <button class="btn btn-secondary btn-sm" onclick="openEditModal()">✏️ Editar OT</button>
     <button class="btn btn-secondary btn-sm" style="color:var(--red);border-color:var(--red-light)"
       onclick="confirmDeleteOT()">🗑 Eliminar</button>
