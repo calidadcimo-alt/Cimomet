@@ -617,7 +617,10 @@ async function pushVencimiento(v) {
 async function pushAllVencimientos() {
   if(!syncEnabled || !(db.vencimientos||[]).length) return;
   try {
-    const rows = db.vencimientos.map(v => ({
+    // Deduplicar por id (Postgres rechaza el lote si hay ids repetidos)
+    const seen = {};
+    db.vencimientos.forEach(v => { seen[v.id] = v; });
+    const rows = Object.values(seen).map(v => ({
       id: v.id, soldador: v.soldador, pst: v.pst, posicion: v.posicion||'',
       mes: v.mes||null, anio: v.anio||null, estado: v.estado||'', updated_at: new Date().toISOString()
     }));
@@ -670,7 +673,7 @@ async function importVencimientosExcel(file) {
       const { pst, pos } = parsePSTposicion(wps);
       if(!pst) continue;
       nuevos.push({
-        id: 'venc_' + pst + '_' + (pos||'NA') + '_' + nombre.replace(/[^A-Za-z0-9]/g,'').slice(0,20),
+        id: 'venc_' + pst + '_' + (pos||'NA') + '_' + nombre.replace(/[^A-Za-z0-9]/g,'').slice(0,20) + '_' + i,
         soldador: nombre, pst, posicion: pos, mes, anio, estado
       });
     }
