@@ -52,9 +52,25 @@ function wpqNormPST(pst) {
   return normPST(pst || '');
 }
 
+// Lista de PSTs derivados de los WPS cargados en la biblioteca de procedimientos
+function wpqPSTsFromWPS() {
+  const psts = {};
+  (db.procedures || []).forEach(p => {
+    if(typeof procCategory === 'function' && procCategory(p.type) === 'Procedimiento de Soldadura (WPS/PQR)') {
+      const pst = (typeof extractPSTFromFilename === 'function')
+        ? extractPSTFromFilename(p.filename || p.name || '') : null;
+      if(pst) psts[pst] = true;
+    }
+  });
+  return Object.keys(psts);
+}
+
 // Lista de PSTs únicos que tienen al menos un WPQ
 function wpqAllPSTs() {
   const psts = {};
+  // Primero, todos los PST que existen como WPS cargados (carpetas vacías a la espera)
+  wpqPSTsFromWPS().forEach(pst => { psts[pst] = []; });
+  // Luego, sumar los WPQ ya cargados (pueden tener PST que coincida o no)
   (db.wpq || []).forEach(e => {
     const key = e.pst || '(sin PST)';
     if(!psts[key]) psts[key] = [];
@@ -92,8 +108,7 @@ function renderWPQ() {
   if(titleEl) titleEl.textContent = 'WPQ — Calificación de soldadores';
 
   if(wpqNav.level === 'pst') {
-    if(actionsEl) actionsEl.innerHTML =
-      `<button class="btn btn-primary btn-sm" onclick="openNewPSTModal()">+ Nueva carpeta WPS</button>`;
+    if(actionsEl) actionsEl.innerHTML = '';
     renderWPQpstLevel();
   } else if(wpqNav.level === 'soldadores') {
     if(actionsEl) actionsEl.innerHTML =
@@ -117,7 +132,8 @@ function renderWPQpstLevel() {
     cards = `<div class="empty fade-in" style="padding:40px">
       <div class="empty-icon">📁</div>
       <h3>Sin carpetas de WPS todavía</h3>
-      <p>Creá una carpeta de WPS (por número PST) para empezar a cargar soldadores.</p>
+      <p>Las carpetas se crean automáticamente al cargar procedimientos WPS.<br>
+      Cargá un WPS en la sección "WPS y PQR" y su carpeta aparecerá acá.</p>
     </div>`;
   } else {
     cards = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">` +
@@ -131,15 +147,13 @@ function renderWPQpstLevel() {
           </svg>
           <div style="font-size:13px;font-weight:600;margin-top:8px">PST ${esc(pst)}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px">${count} soldador${count===1?'':'es'}</div>
-          <button onclick="event.stopPropagation();deletePSTFolder('${escAttr(pst)}')"
-            style="margin-top:8px;font-size:10px;color:var(--red);background:none;border:none;cursor:pointer">eliminar</button>
         </div>`;
       }).join('') + `</div>`;
   }
 
   main.innerHTML = `<div class="fade-in">
     <div style="margin-bottom:16px;color:var(--text2);font-size:13px">
-      Carpetas de WPS organizadas por número PST. Hacé click para ver los soldadores calificados.
+      Una carpeta por cada WPS cargado (por número PST). Hacé click para ver y cargar los soldadores calificados.
     </div>
     ${cards}
   </div>`;
@@ -239,21 +253,6 @@ function wpqBack() {
     wpqNav = { level: 'pst', pst: null, soldador: null };
   }
   renderWPQ();
-}
-
-// ── Crear carpeta de PST manualmente ─────────────────────────
-
-function openNewPSTModal() {
-  const pst = prompt('Número de PST para la nueva carpeta (ej: 14-08):');
-  if(!pst) return;
-  const clean = pst.trim();
-  if(!clean) return;
-  // Crear un registro placeholder vacío para que la carpeta exista
-  // (se elimina sola si nunca se le carga un soldador y se recarga la página;
-  //  para persistir, creamos una entrada vacía marcada)
-  if(wpqAllPSTs()[clean]) { alert('Ya existe una carpeta para ese PST.'); wpqOpenPST(clean); return; }
-  // Abrir directamente la carpeta (vacía) para cargar soldadores
-  wpqOpenPST(clean);
 }
 
 // ── Carga de carpetas (múltiples soldadores) ─────────────────
