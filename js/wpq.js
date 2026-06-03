@@ -5,6 +5,7 @@
 
 // Estado de navegación del explorador WPQ
 let wpqNav = { level: 'pst', pst: null, soldador: null };
+let wpqScrollMemory = {}; // recuerda el scroll por nivel
 
 // ── Sincronización con la nube (tabla wpq) ───────────────────
 
@@ -163,6 +164,8 @@ function renderWPQpstLevel() {
 }
 
 function wpqOpenPST(pst) {
+  const c = document.getElementById('main-content');
+  if(c) wpqScrollMemory['pst'] = c.scrollTop;
   wpqNav = { level: 'soldadores', pst: pst, soldador: null };
   renderWPQ();
 }
@@ -214,6 +217,8 @@ function renderWPQsoldadoresLevel() {
 }
 
 function wpqOpenSoldador(id) {
+  const c = document.getElementById('main-content');
+  if(c) wpqScrollMemory['soldadores:' + wpqNav.pst] = c.scrollTop;
   wpqNav = { level: 'archivos', pst: wpqNav.pst, soldador: id };
   renderWPQ();
 }
@@ -249,6 +254,7 @@ function renderWPQarchivosLevel() {
           <button class="btn btn-secondary btn-sm" title="Ver" onclick="viewWPQFile('${escAttr(entry.id)}','${escAttr(f.id)}')" style="padding:4px 8px">👁</button>
           <button class="btn btn-secondary btn-sm" title="Descargar" onclick="downloadWPQFile('${escAttr(entry.id)}','${escAttr(f.id)}')" style="padding:4px 8px">⬇</button>
           <button class="btn btn-secondary btn-sm" title="Imprimir" onclick="printWPQFile('${escAttr(entry.id)}','${escAttr(f.id)}')" style="padding:4px 8px">🖨</button>
+          <button class="btn btn-secondary btn-sm" title="Eliminar archivo" onclick="deleteWPQFile('${escAttr(entry.id)}','${escAttr(f.id)}')" style="padding:4px 8px;color:var(--red)">🗑</button>
         </div>`).join('') + `</div>`;
   }
 
@@ -310,10 +316,21 @@ function moveWPQFileOut(fromId, fileId) {
 function wpqBack() {
   if(wpqNav.level === 'archivos') {
     wpqNav = { level: 'soldadores', pst: wpqNav.pst, soldador: null };
+    renderWPQ();
+    wpqRestoreScroll('soldadores:' + wpqNav.pst);
   } else if(wpqNav.level === 'soldadores') {
     wpqNav = { level: 'pst', pst: null, soldador: null };
+    renderWPQ();
+    wpqRestoreScroll('pst');
   }
-  renderWPQ();
+}
+
+function wpqRestoreScroll(key) {
+  const c = document.getElementById('main-content');
+  const y = wpqScrollMemory[key];
+  if(c && y != null) {
+    requestAnimationFrame(() => { c.scrollTop = y; });
+  }
 }
 
 // ── Carga de carpetas (múltiples soldadores) ─────────────────
@@ -459,6 +476,20 @@ async function printWPQFile(entryId, fileId) {
     if(win) { win.addEventListener('load', () => { try{ win.print(); }catch(e){} }); }
     setTimeout(() => URL.revokeObjectURL(url), 8000);
   } catch(e) { alert('Error al imprimir: ' + e.message); }
+}
+
+// Elimina un solo archivo de un soldador
+function deleteWPQFile(entryId, fileId) {
+  const entry = (db.wpq||[]).find(e => e.id === entryId);
+  if(!entry) return;
+  const meta = (entry.files||[]).find(f => f.id === fileId);
+  if(!meta) return;
+  if(!confirm(`¿Eliminar el archivo "${meta.name}"?`)) return;
+  if(fileId) idbDelete(fileId).catch(()=>{});
+  entry.files = entry.files.filter(f => f.id !== fileId);
+  pushWPQ(entry);
+  saveDB();
+  renderWPQ();
 }
 
 // ── Eliminar ─────────────────────────────────────────────────
