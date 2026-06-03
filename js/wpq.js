@@ -158,7 +158,7 @@ const count = psts[pst].length;
   }
 
   main.innerHTML = `<div class="fade-in">
-    <div style="position:sticky;top:0;z-index:5;background:var(--bg);padding-bottom:12px;margin-bottom:4px">
+    <div style="position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 0;margin:-12px 0 4px">
       ${vencimientosBannerHTML()}
     </div>
     <div style="margin-bottom:16px;color:var(--text2);font-size:13px">
