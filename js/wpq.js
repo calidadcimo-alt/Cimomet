@@ -88,7 +88,10 @@ function wpqSoldadoresFor(pst) {
 function wpqSoldadoresForWPSNum(pstNum) {
   const target = wpqNormPST(pstNum);
   if(!target) return [];
-  return (db.wpq || []).filter(e => wpqNormPST(e.pst) === target);
+  return (db.wpq || []).filter(e =>
+    wpqNormPST(e.pst) === target &&
+    !/^inactivos?$/i.test((e.soldador || '').trim())   // no mostrar la carpeta INACTIVOS en la OT
+  );
 }
 
 // ── Vista principal (sidebar WPQ) ────────────────────────────
@@ -222,10 +225,17 @@ function renderWPQarchivosLevel() {
   const main = document.getElementById('main-content');
   if(!entry) { wpqBack(); return; }
 
+  const isInactivos = /^inactivos?$/i.test((entry.soldador||'').trim());
+
   const bc = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
     <button class="btn btn-secondary btn-sm" onclick="wpqBack()">← Volver</button>
     <span style="font-size:13px;color:var(--text2)">WPQ / PST ${esc(entry.pst)} / <strong style="color:var(--text)">${esc(entry.soldador)}</strong></span>
   </div>`;
+
+  const hint = isInactivos
+    ? `<div style="font-size:12px;color:var(--text2);background:var(--surface2);border-radius:var(--r);padding:8px 12px;margin-bottom:12px">
+        Esta carpeta agrupa archivos sin soldador asignado. Usá "mover" para sacar un archivo a su soldador.
+      </div>` : '';
 
   let files = '';
   if((entry.files||[]).length === 0) {
@@ -235,13 +245,64 @@ function renderWPQarchivosLevel() {
       entry.files.map(f => `<div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--accent)"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
           <span style="font-size:13px;flex:1">${esc(f.name)}</span>
+          ${isInactivos ? `<button class="btn btn-secondary btn-sm" title="Mover a un soldador" onclick="moveWPQFileOut('${escAttr(entry.id)}','${escAttr(f.id)}')" style="padding:4px 8px">↗ mover</button>` : ''}
           <button class="btn btn-secondary btn-sm" title="Ver" onclick="viewWPQFile('${escAttr(entry.id)}','${escAttr(f.id)}')" style="padding:4px 8px">👁</button>
           <button class="btn btn-secondary btn-sm" title="Descargar" onclick="downloadWPQFile('${escAttr(entry.id)}','${escAttr(f.id)}')" style="padding:4px 8px">⬇</button>
           <button class="btn btn-secondary btn-sm" title="Imprimir" onclick="printWPQFile('${escAttr(entry.id)}','${escAttr(f.id)}')" style="padding:4px 8px">🖨</button>
         </div>`).join('') + `</div>`;
   }
 
-  main.innerHTML = `<div class="fade-in">${bc}${files}</div>`;
+  main.innerHTML = `<div class="fade-in">${bc}${hint}${files}</div>`;
+}
+
+// Mueve un archivo desde INACTIVOS hacia un soldador (existente o nuevo) en el mismo PST
+function moveWPQFileOut(fromId, fileId) {
+  const fromEntry = (db.wpq||[]).find(e => e.id === fromId);
+  if(!fromEntry) return;
+  const fileMeta = (fromEntry.files||[]).find(f => f.id === fileId);
+  if(!fileMeta) return;
+
+  // Soldadores existentes en este PST (excluyendo INACTIVOS)
+  const others = (db.wpq||[]).filter(e =>
+    e.pst === fromEntry.pst && e.id !== fromId &&
+    !/^inactivos?$/i.test((e.soldador||'').trim())
+  );
+  let listed = others.map((e,i) => `${i+1}. ${e.soldador}`).join('\n');
+  const promptMsg = `Mover "${fileMeta.name}" a un soldador del PST ${fromEntry.pst}.\n\n` +
+    (others.length ? `Escribí el número de un soldador existente:\n${listed}\n\nO escribí un nombre nuevo:` :
+     `Escribí el nombre del soldador:`);
+  const answer = prompt(promptMsg);
+  if(answer === null) return;
+  const val = answer.trim();
+  if(!val) return;
+
+  // ¿Eligió un número de la lista?
+  let target = null;
+  const num = parseInt(val, 10);
+  if(others.length && /^\d+$/.test(val) && num >= 1 && num <= others.length) {
+    target = others[num-1];
+  } else {
+    // Nombre nuevo o existente por nombre
+    target = (db.wpq||[]).find(e => e.pst === fromEntry.pst &&
+      e.soldador.toLowerCase() === val.toLowerCase() &&
+      !/^inactivos?$/i.test((e.soldador||'').trim()));
+    if(!target) {
+      target = { id:'wpq_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+                 pst: fromEntry.pst, soldador: val, files: [] };
+      if(!db.wpq) db.wpq = [];
+      db.wpq.push(target);
+    }
+  }
+
+  // Mover el archivo
+  target.files.push(fileMeta);
+  fromEntry.files = fromEntry.files.filter(f => f.id !== fileId);
+
+  // Persistir ambos
+  pushWPQ(target);
+  pushWPQ(fromEntry);
+  saveDB();
+  renderWPQ();
 }
 
 // ── Navegación: volver un nivel ──────────────────────────────
@@ -269,7 +330,10 @@ async function handleWPQFolderUpload(fileList) {
   //      "Juan Perez/archivo.pdf"           → soldador = "Juan Perez"
   // Detectamos la profundidad máxima de las rutas para decidir.
   const paths = [];
+  const IGNORE = /^(thumbs\.db|desktop\.ini|\.ds_store)$/i;
   for(const file of fileList) {
+    if(IGNORE.test(file.name)) continue;        // basura del sistema (Thumbs.db, etc.)
+    if(file.name.startsWith('.')) continue;       // archivos ocultos
     const rel = file.webkitRelativePath || file.name;
     paths.push({ file, parts: rel.split('/').filter(Boolean) });
   }
@@ -446,12 +510,15 @@ function wpqBlockForOT(pstNum) {
     </div>`;
   }).join('');
 
-  return `<div style="margin-top:10px;padding:10px 12px;background:var(--bg);border-radius:var(--r)">
-    <div style="font-size:11px;color:var(--text2);margin-bottom:8px;display:flex;align-items:center;gap:6px">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--text2)"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-      Soldadores calificados para PST ${esc(pstNum)}
-    </div>
-    ${rows}
+  return `<div style="margin-top:10px;background:var(--bg);border-radius:var(--r)">
+    <details style="border-radius:var(--r);overflow:hidden">
+      <summary style="font-size:11px;color:var(--text2);padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none;list-style:none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--text2)"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        Soldadores calificados para PST ${esc(pstNum)}
+        <span style="margin-left:auto;font-size:10px;background:var(--surface2);padding:2px 7px;border-radius:9px">${soldadores.length}</span>
+      </summary>
+      <div style="padding:0 12px 10px 12px">${rows}</div>
+    </details>
   </div>`;
 }
 
