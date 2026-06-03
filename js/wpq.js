@@ -714,7 +714,15 @@ function vencimientosResumen() {
     if(e === 'vencido') vencidos.push(v);
     else if(e === 'porvencer') porvencer.push(v);
   });
-  const ordena = (a,b) => (a.soldador||'').localeCompare(b.soldador||'');
+  // Ordenar por PST (numérico), luego posición, luego soldador
+  const pstKey = (v) => {
+    const parts = String(v.pst||'').split('-').map(n => parseInt(n,10) || 0);
+    return parts[0]*1000 + (parts[1]||0);
+  };
+  const ordena = (a,b) =>
+    pstKey(a) - pstKey(b) ||
+    String(a.posicion||'').localeCompare(String(b.posicion||'')) ||
+    String(a.soldador||'').localeCompare(String(b.soldador||''));
   vencidos.sort(ordena); porvencer.sort(ordena);
   return { vencidos, porvencer };
 }
@@ -723,13 +731,27 @@ function vencimientosResumen() {
 function vencimientosBannerHTML() {
   const { vencidos, porvencer } = vencimientosResumen();
   const fmtNombre = (s) => {
-    // "ALDERETE, DANIEL" → "Alderete, Daniel" (capitalizado simple)
     return String(s||'').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
   };
-  const chip = (v, color, bg) =>
-    `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:${bg};color:${color};border:1px solid ${color}33;padding:3px 9px;border-radius:12px;white-space:nowrap">
-      ${esc(fmtNombre(v.soldador))} · PST ${esc(v.pst)}${v.posicion?(' · '+esc(v.posicion)):''}
-    </span>`;
+  // Agrupa una lista por PST y devuelve HTML con un sub-bloque por PST
+  const groupByPST = (lista, color, bg) => {
+    const groups = {};
+    lista.forEach(v => { (groups[v.pst] = groups[v.pst] || []).push(v); });
+    const pstSort = (a,b) => {
+      const pa = a.split('-').map(n=>parseInt(n,10)||0), pb = b.split('-').map(n=>parseInt(n,10)||0);
+      return (pa[0]*1000+(pa[1]||0)) - (pb[0]*1000+(pb[1]||0));
+    };
+    return Object.keys(groups).sort(pstSort).map(pst => {
+      const chips = groups[pst].map(v =>
+        `<span style="display:inline-flex;align-items:center;font-size:11px;background:${bg};color:${color};border:1px solid ${color}33;padding:3px 9px;border-radius:12px;white-space:nowrap">
+          ${esc(fmtNombre(v.soldador))}${v.posicion?(' · '+esc(v.posicion)):''}
+        </span>`).join('');
+      return `<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:5px">
+        <span style="font-size:11px;font-weight:600;color:var(--text);min-width:64px;white-space:nowrap">PST ${esc(pst)}</span>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${chips}</div>
+      </div>`;
+    }).join('');
+  };
 
   if(vencidos.length === 0 && porvencer.length === 0) {
     return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px">
@@ -740,21 +762,21 @@ function vencimientosBannerHTML() {
 
   let html = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:11px 14px">`;
   if(vencidos.length) {
-    html += `<div style="margin-bottom:${porvencer.length?'9px':'0'}">
-      <div style="font-size:11px;font-weight:600;color:var(--red);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+    html += `<div style="margin-bottom:${porvencer.length?'11px':'0'}">
+      <div style="font-size:11px;font-weight:600;color:var(--red);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px;display:flex;align-items:center;gap:6px">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--red)"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
         Vencidos (${vencidos.length})
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">${vencidos.map(v=>chip(v,'var(--red)','var(--red-light)')).join('')}</div>
+      ${groupByPST(vencidos,'var(--red)','var(--red-light)')}
     </div>`;
   }
   if(porvencer.length) {
     html += `<div>
-      <div style="font-size:11px;font-weight:600;color:var(--amber);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+      <div style="font-size:11px;font-weight:600;color:var(--amber);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px;display:flex;align-items:center;gap:6px">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--amber)"><path d="M11 7h2v6h-2zm0 8h2v2h-2zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>
         Por vencer este mes (${porvencer.length})
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">${porvencer.map(v=>chip(v,'var(--amber)','var(--amber-light)')).join('')}</div>
+      ${groupByPST(porvencer,'var(--amber)','var(--amber-light)')}
     </div>`;
   }
   html += `</div>`;
