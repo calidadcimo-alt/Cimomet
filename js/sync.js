@@ -178,9 +178,15 @@ async function syncFromCloud() {
       if(rp.ok) procRows = procRows.concat(await rp.json());
     }
 
+    // Fetch WPQ (calificaciones de soldadores)
+    let wpqRows = [];
+    try {
+      const rw = await fetch(SUPA_URL + '/rest/v1/wpq?select=*', {headers: supaHeaders()});
+      if(rw.ok) wpqRows = await rw.json();
+    } catch(e) {}
+
     // Fetch library
-    const rLib = await fetch(SUPA_URL + '/rest/v1/library?id=eq.main&select=data', {headers: supaHeaders()});
-    const libRows = rLib.ok ? await rLib.json() : [];
+    const rLib = await fetch(SUPA_URL + '/rest/v1/library?id=eq.main&select=data', {headers: supaHeaders()});   const libRows = rLib.ok ? await rLib.json() : [];
 
     const cloudHasData = otRows.length > 0;
     const localEmpty = !db.ots || db.ots.length === 0;
@@ -198,6 +204,9 @@ async function syncFromCloud() {
       db.procedures = procRows.map(r => ({
         id: r.id, name: r.name, type: r.type, fileType: r.file_type,
         filename: r.filename, date: r.date, mimeType: r.mime_type
+      }));
+      db.wpq = wpqRows.map(r => ({
+        id: r.id, pst: r.pst, soldador: r.soldador, files: r.files || []
       }));
       if(libRows.length && libRows[0].data) {
         db.customLibrary = libRows[0].data.customLibrary || [];

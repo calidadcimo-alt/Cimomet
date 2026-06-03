@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cimomet · Databook Manager</title>
-<link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -17,7 +16,7 @@
   <aside class="sidebar">
     <div class="sidebar-top">
       <div class="brand">CIMOMET <span>SA</span></div>
-      <div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:2px">Gestión de Databooks</div>
+      <div style="font-size:11px;color:rgba(255,255,255,.55);margin-top:2px">Gestión de Databooks · v25-sync</div>
     </div>
     <div class="sidebar-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:16px">
       <span>Órdenes de Trabajo</span>
@@ -53,6 +52,16 @@
         <div style="min-width:0">
           <div class="ot-num">WPS y PQR</div>
           <div class="ot-meta" id="sidebar-count-wps">Soldadura</div>
+        </div>
+      </div>
+      <div class="ot-item" id="sidebar-proc-wpq" onclick="showWPQView()"
+           style="padding:8px 20px;border-radius:0;border-left:3px solid transparent">
+        <svg width="13" height="13" fill="rgba(255,255,255,.5)" viewBox="0 0 24 24" style="flex-shrink:0">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+        </svg>
+        <div style="min-width:0">
+          <div class="ot-num">WPQ</div>
+          <div class="ot-meta" id="sidebar-count-wpq">Calificación de soldadores</div>
         </div>
       </div>
     </div>
@@ -164,6 +173,7 @@
 <script src="js/items.js"></script>
 <script src="js/procedimientos.js"></script>
 <script src="js/caratulas.js"></script>
+<script src="js/wpq.js"></script>
 <script src="js/app.js"></script>
 <!-- Modal: Agregar ítem personalizado -->
 <div class="modal-overlay" id="modal-custom-item" style="display:none" onclick="if(event.target.id==='modal-custom-item')closeAddCustomModal()">

@@ -64,6 +64,7 @@ function loadDB(){
   try{ const s=localStorage.getItem('cimomet_db'); if(s) db=JSON.parse(s); }catch(e){}
   if(!db.customLibrary) db.customLibrary=[];
   if(!db.procedures) db.procedures=[];
+  if(!db.wpq) db.wpq=[];
   // Strip any leftover file data from localStorage (migration)
   db.procedures.forEach(p => { delete p.data; });
   if(!db.customProcTypes) db.customProcTypes = [];

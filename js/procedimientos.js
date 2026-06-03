@@ -325,8 +325,15 @@ function renderTabProcedimientos(ot, el) {
   // Single proc card row
   const assignedCard = (p) => {
     const isAuto = autoIds.has(p.id);
+    // Si es un WPS, mostrar debajo los soldadores con WPQ para ese PST
+    let wpqBlock = '';
+    if(typeof procCategory==='function' && procCategory(p.type) === 'Procedimiento de Soldadura (WPS/PQR)'
+       && typeof extractPSTFromFilename==='function' && typeof wpqBlockForOT==='function') {
+      const pst = extractPSTFromFilename(p.filename || p.name || '');
+      if(pst) wpqBlock = wpqBlockForOT(pst);
+    }
     return `<div class="proc-card ${isAuto?'proc-matched':''}"
-      style="${!isAuto?'border-color:var(--amber);background:var(--amber-light)':''}">
+      style="${!isAuto?'border-color:var(--amber);background:var(--amber-light)':''};flex-wrap:wrap">
       <div class="proc-icon" style="font-size:16px">${p.fileType==='pdf'?'📕':'📘'}</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:500">${esc(p.name)}</div>
@@ -340,6 +347,7 @@ function renderTabProcedimientos(ot, el) {
         <button class="btn btn-danger btn-sm" title="Quitar"
           onclick="unassignProc('${p.id}')" style="padding:5px 8px">✕</button>
       </div>
+      ${wpqBlock ? `<div style="flex-basis:100%;width:100%">${wpqBlock}</div>` : ''}
     </div>`;
   };
 
