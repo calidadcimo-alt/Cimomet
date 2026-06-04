@@ -221,12 +221,8 @@ function processF07(text,filename){
   m=text.match(/PLANO[:\s]+(?:N[°º]?[\s]*)?([\w\dÁÉÍÓÚÑ][\w\dÁÉÍÓÚÑ\-\.\/\s]{1,30}?)(?=\s{2,}|\s*\||\bO\s+TECNICA|\bO\.|\bCLIENTE|\bOFERTA|\bREF|$)/i);
   if(m){ ot.plano=m[1].trim().replace(/\s+/g,' '); }
 
-  // Año — extract from 4-digit years OR 2-digit dates like 10/03/26
-  const years4=text.match(/\b(20\d{2})\b/g)||[];
-  const years2=(text.match(/\d{1,2}[\/-]\d{1,2}[\/-](\d{2})\b/g)||[])
-    .map(d=>{ const y=d.split(/[\/\-]/).pop(); return y.length===2?'20'+y:y; });
-  const allYears=[...years4,...years2].filter(y=>y>='2020'&&y<='2035');
-  if(allYears.length) ot.anio=allYears.sort().pop();
+  // Año — usar el año en curso (no el del F-07)
+  ot.anio = String(new Date().getFullYear());
 
   // OFerta técnica (número de oferta — útil para referencia)
   m=text.match(/OFERTA\s+TECNICA[\s\S]{0,20}?N[°º][\s]*(\d+[-\/\d]*)/i);
