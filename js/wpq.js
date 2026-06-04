@@ -2,13 +2,13 @@
 // wpq.js — Calificaciones de soldadores (WPQ)
 // Navegación tipo explorador: PST → soldadores → archivos
 // ════════════════════════════════════════════════════════════
- 
+
 // Estado de navegación del explorador WPQ
 let wpqNav = { level: 'pst', pst: null, soldador: null };
 let wpqScrollMemory = {}; // recuerda el scroll por nivel
- 
+
 // ── Sincronización con la nube (tabla wpq) ───────────────────
- 
+
 // Sube un registro WPQ (un soldador para un PST) inmediatamente
 async function pushWPQ(entry) {
   if(!syncEnabled || !entry) return;
@@ -28,7 +28,7 @@ async function pushWPQ(entry) {
     if(!r.ok) console.error('[pushWPQ]', r.status, await r.text());
   } catch(e) { console.error('[pushWPQ]', e); }
 }
- 
+
 // Borra un registro WPQ de la nube
 async function deleteWPQFromCloud(id) {
   if(!syncEnabled || !id) return;
@@ -36,7 +36,7 @@ async function deleteWPQFromCloud(id) {
     await fetch(SUPA_URL + '/rest/v1/wpq?id=eq.' + id, {method:'DELETE', headers: supaHeaders()});
   } catch(e) {}
 }
- 
+
 // Baja todos los WPQ de la nube (se llama desde syncFromCloud)
 async function fetchWPQFromCloud() {
   try {
@@ -45,14 +45,14 @@ async function fetchWPQFromCloud() {
     return await r.json();
   } catch(e) { return null; }
 }
- 
+
 // ── Helpers de datos ─────────────────────────────────────────
- 
+
 // Normaliza un PST para comparar (igual criterio que los WPS)
 function wpqNormPST(pst) {
   return normPST(pst || '');
 }
- 
+
 // Lista de PSTs derivados de los WPS cargados en la biblioteca de procedimientos
 function wpqPSTsFromWPS() {
   const psts = {};
@@ -65,7 +65,7 @@ function wpqPSTsFromWPS() {
   });
   return Object.keys(psts);
 }
- 
+
 // Lista de PSTs únicos que tienen al menos un WPQ
 function wpqAllPSTs() {
   const psts = {};
@@ -79,12 +79,12 @@ function wpqAllPSTs() {
   });
   return psts;
 }
- 
+
 // Soldadores de un PST dado
 function wpqSoldadoresFor(pst) {
   return (db.wpq || []).filter(e => e.pst === pst);
 }
- 
+
 // Soldadores cuyo PST coincide (normalizado) con el de un WPS asignado
 function wpqSoldadoresForWPSNum(pstNum) {
   const target = wpqNormPST(pstNum);
@@ -94,9 +94,9 @@ function wpqSoldadoresForWPSNum(pstNum) {
     !/^inactivos?$/i.test((e.soldador || '').trim())   // no mostrar la carpeta INACTIVOS en la OT
   );
 }
- 
+
 // ── Vista principal (sidebar WPQ) ────────────────────────────
- 
+
 function showWPQView() {
   currentOT = null;
   currentTab = 'datos';
@@ -107,12 +107,12 @@ function showWPQView() {
   wpqNav = { level: 'pst', pst: null, soldador: null };
   renderWPQ();
 }
- 
+
 function renderWPQ() {
   const titleEl = document.getElementById('topbar-title');
   const actionsEl = document.getElementById('topbar-actions');
   if(titleEl) titleEl.textContent = 'WPQ — Calificación de soldadores';
- 
+
   if(wpqNav.level === 'pst') {
     if(actionsEl) actionsEl.innerHTML =
       `<button class="btn btn-secondary btn-sm" onclick="showProceduresMenu()">← Procedimientos</button>
@@ -127,14 +127,14 @@ function renderWPQ() {
     renderWPQarchivosLevel();
   }
 }
- 
+
 // ── NIVEL 1: carpetas de PST ─────────────────────────────────
- 
+
 function renderWPQpstLevel() {
   const psts = wpqAllPSTs();
   const keys = Object.keys(psts).sort();
   const main = document.getElementById('main-content');
- 
+
   let cards = '';
   if(keys.length === 0) {
     cards = `<div class="empty fade-in" style="padding:40px">
@@ -157,7 +157,7 @@ function renderWPQpstLevel() {
         </div>`;
       }).join('') + `</div>`;
   }
- 
+
   main.innerHTML = `<div class="fade-in">
     <div style="position:sticky;top:0;z-index:10;background:var(--bg);padding:24px 40px 12px;margin:-24px -40px 4px">
       ${vencimientosBannerHTML()}
@@ -170,26 +170,26 @@ function renderWPQpstLevel() {
       onchange="if(this.files[0]) importVencimientosExcel(this.files[0])">
   </div>`;
 }
- 
+
 function wpqOpenPST(pst) {
   const c = document.getElementById('main-content');
   if(c) wpqScrollMemory['pst'] = c.scrollTop;
   wpqNav = { level: 'soldadores', pst: pst, soldador: null };
   renderWPQ();
 }
- 
+
 // ── NIVEL 2: carpetas de soldadores ──────────────────────────
- 
+
 function renderWPQsoldadoresLevel() {
   const soldadores = wpqSoldadoresFor(wpqNav.pst);
   const main = document.getElementById('main-content');
- 
+
   // Breadcrumb + back
   const bc = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
     <button class="btn btn-secondary btn-sm" onclick="wpqBack()">← Volver</button>
     <span style="font-size:13px;color:var(--text2)">WPQ / <strong style="color:var(--text)">PST ${esc(wpqNav.pst)}</strong></span>
   </div>`;
- 
+
   let cards = '';
   if(soldadores.length === 0) {
     cards = `<div class="empty fade-in" style="padding:40px">
@@ -215,29 +215,29 @@ function renderWPQsoldadoresLevel() {
         </div>`;
       }).join('') + `</div>`;
   }
- 
+
   main.innerHTML = `<div class="fade-in">${bc}${cards}
     <input type="file" id="wpq-folder-input" webkitdirectory directory multiple
       style="display:none" onchange="handleWPQFolderUpload(this.files)">
   </div>`;
 }
- 
+
 function wpqOpenSoldador(id) {
   const c = document.getElementById('main-content');
   if(c) wpqScrollMemory['soldadores:' + wpqNav.pst] = c.scrollTop;
   wpqNav = { level: 'archivos', pst: wpqNav.pst, soldador: id };
   renderWPQ();
 }
- 
+
 // ── NIVEL 3: archivos del soldador ───────────────────────────
- 
+
 function renderWPQarchivosLevel() {
   const entry = (db.wpq||[]).find(e => e.id === wpqNav.soldador);
   const main = document.getElementById('main-content');
   if(!entry) { wpqBack(); return; }
- 
+
   const isInactivos = /^inactivos?$/i.test((entry.soldador||'').trim());
- 
+
   // Estado de vencimiento actual de este soldador para este PST
   let vencInfo = '';
   let revalBtn = '';
@@ -257,7 +257,7 @@ function renderWPQarchivosLevel() {
     }
     revalBtn = `<button class="btn btn-primary btn-sm" onclick="revalidarSoldador('${escAttr(entry.soldador)}','${escAttr(entry.pst)}')" style="margin-left:auto">↻ Revalidar</button>`;
   }
- 
+
   const bc = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
     <button class="btn btn-secondary btn-sm" onclick="wpqBack()">← Volver</button>
     <div style="min-width:0">
@@ -266,12 +266,12 @@ function renderWPQarchivosLevel() {
     </div>
     ${revalBtn}
   </div>`;
- 
+
   const hint = isInactivos
     ? `<div style="font-size:12px;color:var(--text2);background:var(--surface2);border-radius:var(--r);padding:8px 12px;margin-bottom:12px">
         Esta carpeta agrupa archivos sin soldador asignado. Usá "mover" para sacar un archivo a su soldador.
       </div>` : '';
- 
+
   let files = '';
   if((entry.files||[]).length === 0) {
     files = `<div style="color:var(--text3);font-size:13px;padding:20px">Este soldador no tiene archivos cargados.</div>`;
@@ -287,17 +287,17 @@ function renderWPQarchivosLevel() {
           <button class="btn btn-secondary btn-sm" title="Eliminar archivo" onclick="deleteWPQFile('${escAttr(entry.id)}','${escAttr(f.id)}')" style="padding:4px 8px;color:var(--red)">🗑</button>
         </div>`).join('') + `</div>`;
   }
- 
+
   main.innerHTML = `<div class="fade-in">${bc}${hint}${files}</div>`;
 }
- 
+
 // Mueve un archivo desde INACTIVOS hacia un soldador (existente o nuevo) en el mismo PST
 function moveWPQFileOut(fromId, fileId) {
   const fromEntry = (db.wpq||[]).find(e => e.id === fromId);
   if(!fromEntry) return;
   const fileMeta = (fromEntry.files||[]).find(f => f.id === fileId);
   if(!fileMeta) return;
- 
+
   // Soldadores existentes en este PST (excluyendo INACTIVOS)
   const others = (db.wpq||[]).filter(e =>
     e.pst === fromEntry.pst && e.id !== fromId &&
@@ -311,7 +311,7 @@ function moveWPQFileOut(fromId, fileId) {
   if(answer === null) return;
   const val = answer.trim();
   if(!val) return;
- 
+
   // ¿Eligió un número de la lista?
   let target = null;
   const num = parseInt(val, 10);
@@ -329,20 +329,20 @@ function moveWPQFileOut(fromId, fileId) {
       db.wpq.push(target);
     }
   }
- 
+
   // Mover el archivo
   target.files.push(fileMeta);
   fromEntry.files = fromEntry.files.filter(f => f.id !== fileId);
- 
+
   // Persistir ambos
   pushWPQ(target);
   pushWPQ(fromEntry);
   saveDB();
   renderWPQ();
 }
- 
+
 // ── Navegación: volver un nivel ──────────────────────────────
- 
+
 function wpqBack() {
   if(wpqNav.level === 'archivos') {
     wpqNav = { level: 'soldadores', pst: wpqNav.pst, soldador: null };
@@ -354,7 +354,7 @@ function wpqBack() {
     wpqRestoreScroll('pst');
   }
 }
- 
+
 function wpqRestoreScroll(key) {
   const c = document.getElementById('main-content');
   const y = wpqScrollMemory[key];
@@ -362,14 +362,14 @@ function wpqRestoreScroll(key) {
     requestAnimationFrame(() => { c.scrollTop = y; });
   }
 }
- 
+
 // ── Carga de carpetas (múltiples soldadores) ─────────────────
- 
+
 async function handleWPQFolderUpload(fileList) {
   if(!fileList || fileList.length === 0) return;
   const pst = wpqNav.pst;
   if(!pst) { alert('Abrí primero una carpeta de PST.'); return; }
- 
+
   // Agrupar archivos por soldador. Soporta dos formas de carga:
   //  (A) Carpeta padre de PST que contiene subcarpetas de soldadores:
   //      "PST14-08/Juan Perez/archivo.pdf"  → soldador = "Juan Perez"
@@ -386,7 +386,7 @@ async function handleWPQFolderUpload(fileList) {
   }
   // Profundidad: cantidad de segmentos de carpeta (sin contar el archivo)
   const maxDepth = Math.max(...paths.map(p => p.parts.length));
- 
+
   const bySoldador = {};
   for(const { file, parts } of paths) {
     let soldador;
@@ -406,16 +406,16 @@ async function handleWPQFolderUpload(fileList) {
     if(!bySoldador[soldador]) bySoldador[soldador] = [];
     bySoldador[soldador].push(file);
   }
- 
+
   const soldadorNames = Object.keys(bySoldador);
   if(soldadorNames.length === 0) return;
- 
+
   // Indicador
   setSyncStatus('syncing', 'Subiendo carpetas…');
- 
+
   let totalFiles = 0, doneFiles = 0;
   soldadorNames.forEach(s => totalFiles += bySoldador[s].length);
- 
+
   for(const soldador of soldadorNames) {
     const files = bySoldador[soldador];
     // ¿Ya existe este soldador en este PST? Si sí, le agregamos archivos.
@@ -425,7 +425,7 @@ async function handleWPQFolderUpload(fileList) {
       entry = { id: 'wpq_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
                 pst, soldador, files: [] };
     }
- 
+
     for(const file of files) {
       try {
         const fileType = file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'other';
@@ -444,22 +444,22 @@ async function handleWPQFolderUpload(fileList) {
       doneFiles++;
       setSyncStatus('syncing', `Subiendo ${doneFiles}/${totalFiles}…`);
     }
- 
+
     if(isNew) {
       if(!db.wpq) db.wpq = [];
       db.wpq.push(entry);
     }
     pushWPQ(entry);
   }
- 
+
   saveDB();
   setSyncStatus('ok', 'Guardado');
   setTimeout(()=>setSyncStatus('idle'), 2000);
   renderWPQ();
 }
- 
+
 // ── Acciones de archivos (ver / descargar / imprimir) ────────
- 
+
 async function getWPQFileRecord(entryId, fileId) {
   const entry = (db.wpq||[]).find(e => e.id === entryId);
   if(!entry) return null;
@@ -468,7 +468,7 @@ async function getWPQFileRecord(entryId, fileId) {
   const record = await idbGet(fileId);
   return { record, meta };
 }
- 
+
 async function viewWPQFile(entryId, fileId) {
   try {
     const res = await getWPQFileRecord(entryId, fileId);
@@ -480,7 +480,7 @@ async function viewWPQFile(entryId, fileId) {
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   } catch(e) { alert('Error al abrir: ' + e.message); }
 }
- 
+
 async function downloadWPQFile(entryId, fileId) {
   try {
     const res = await getWPQFileRecord(entryId, fileId);
@@ -494,7 +494,7 @@ async function downloadWPQFile(entryId, fileId) {
     URL.revokeObjectURL(url);
   } catch(e) { alert('Error al descargar: ' + e.message); }
 }
- 
+
 async function printWPQFile(entryId, fileId) {
   try {
     const res = await getWPQFileRecord(entryId, fileId);
@@ -507,7 +507,7 @@ async function printWPQFile(entryId, fileId) {
     setTimeout(() => URL.revokeObjectURL(url), 8000);
   } catch(e) { alert('Error al imprimir: ' + e.message); }
 }
- 
+
 // Elimina un solo archivo de un soldador
 function deleteWPQFile(entryId, fileId) {
   const entry = (db.wpq||[]).find(e => e.id === entryId);
@@ -521,9 +521,9 @@ function deleteWPQFile(entryId, fileId) {
   saveDB();
   renderWPQ();
 }
- 
+
 // ── Eliminar ─────────────────────────────────────────────────
- 
+
 function deleteSoldador(id) {
   const entry = (db.wpq||[]).find(e => e.id === id);
   if(!entry) return;
@@ -534,7 +534,7 @@ function deleteSoldador(id) {
   saveDB();
   renderWPQ();
 }
- 
+
 function deletePSTFolder(pst) {
   const soldadores = wpqSoldadoresFor(pst);
   if(!confirm(`¿Eliminar la carpeta PST ${pst} con sus ${soldadores.length} soldador(es)?`)) return;
@@ -546,14 +546,14 @@ function deletePSTFolder(pst) {
   saveDB();
   renderWPQ();
 }
- 
+
 // ── Bloque de soldadores dentro de una OT (auto-asignación) ──
- 
+
 // Devuelve el HTML del bloque de soldadores WPQ para un PST asignado en la OT
 function wpqBlockForOT(pstNum) {
   const soldadores = wpqSoldadoresForWPSNum(pstNum);
   if(soldadores.length === 0) return '';
- 
+
   const rows = soldadores.map(s => {
     const filesHtml = (s.files||[]).map(f =>
       `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
@@ -570,7 +570,7 @@ function wpqBlockForOT(pstNum) {
       <div style="padding-left:21px">${filesHtml || '<span style="font-size:11px;color:var(--text3)">Sin archivos</span>'}</div>
     </div>`;
   }).join('');
- 
+
   return `<div style="margin-top:10px;background:var(--bg);border-radius:var(--r)">
     <details style="border-radius:var(--r);overflow:hidden">
       <summary style="font-size:11px;color:var(--text2);padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none;list-style:none">
@@ -582,23 +582,23 @@ function wpqBlockForOT(pstNum) {
     </details>
   </div>`;
 }
- 
+
 // Helper de escape de atributos (por si no existe en utils)
 function escAttr(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
 }
- 
+
 // ════════════════════════════════════════════════════════════
 // VENCIMIENTOS — import de Excel, resumen y revalidación
 // ════════════════════════════════════════════════════════════
- 
+
 // Parsea "14/08 (2G)" → { pst:"14-08", pos:"2G" }
 function parsePSTposicion(wps) {
   const m = String(wps||'').match(/(\d{1,2})\s*[\/\-]\s*(\d{2,4})\s*\(?\s*([0-9][GgFf])?\s*\)?/);
   if(!m) return { pst: null, pos: '' };
   return { pst: m[1] + '-' + m[2], pos: (m[3]||'').toUpperCase() };
 }
- 
+
 // Sube un registro de vencimiento a la nube
 async function pushVencimiento(v) {
   if(!syncEnabled || !v) return;
@@ -612,7 +612,7 @@ async function pushVencimiento(v) {
     if(!r.ok) console.error('[pushVencimiento]', r.status, await r.text());
   } catch(e) { console.error('[pushVencimiento]', e); }
 }
- 
+
 // Sube todos los vencimientos en lote
 async function pushAllVencimientos() {
   if(!syncEnabled || !(db.vencimientos||[]).length) return;
@@ -631,7 +631,7 @@ async function pushAllVencimientos() {
     if(!r.ok) console.error('[pushAllVencimientos]', r.status, await r.text());
   } catch(e) { console.error('[pushAllVencimientos]', e); }
 }
- 
+
 // Importa el Excel de vencimientos (lee hoja "vencimientos")
 async function importVencimientosExcel(file) {
   if(!file) return;
@@ -644,14 +644,14 @@ async function importVencimientosExcel(file) {
     const sheetName = wb.SheetNames.find(n => /vencimiento/i.test(n)) || wb.SheetNames[0];
     const sh = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(sh, { header: 1, defval: '' });
- 
+
     // Encontrar la fila de encabezado (donde col0 = "APELLIDO Y NOMBRE")
     let headerRow = -1;
     for(let i=0; i<rows.length; i++) {
       if(String(rows[i][0]||'').toUpperCase().includes('APELLIDO')) { headerRow = i; break; }
     }
     if(headerRow < 0) { alert('No encontré la fila de encabezados (APELLIDO Y NOMBRE) en la hoja.'); setSyncStatus('idle'); return; }
- 
+
     // Columnas: 0=nombre, 4=WPS Nº, 8..19=meses 1..12, 20=AÑO, 21=ESTADO
     const nuevos = [];
     let lastNombre = '';
@@ -677,9 +677,9 @@ async function importVencimientosExcel(file) {
         soldador: nombre, pst, posicion: pos, mes, anio, estado
       });
     }
- 
+
     if(nuevos.length === 0) { alert('No se encontraron filas de vencimientos.'); setSyncStatus('idle'); return; }
- 
+
     // Reemplazar la base de vencimientos con lo importado
     db.vencimientos = nuevos;
     saveDB();
@@ -694,7 +694,7 @@ async function importVencimientosExcel(file) {
     alert('Error al leer el Excel: ' + e.message);
   }
 }
- 
+
 // Calcula el estado de vencimiento de un registro ACTIVO respecto a hoy
 // Devuelve: 'vencido' | 'porvencer' | 'vigente' | null (si no aplica)
 function vencEstado(v) {
@@ -708,7 +708,7 @@ function vencEstado(v) {
   if(v.anio === anioHoy && v.mes === mesHoy) return 'porvencer';
   return 'vigente';
 }
- 
+
 // Lista de vencidos y por vencer (solo ACTIVO)
 function vencimientosResumen() {
   const vencidos = [], porvencer = [];
@@ -729,7 +729,7 @@ function vencimientosResumen() {
   vencidos.sort(ordena); porvencer.sort(ordena);
   return { vencidos, porvencer };
 }
- 
+
 // HTML del resumen fijo (sticky) de vencimientos
 function vencimientosBannerHTML() {
   const { vencidos, porvencer } = vencimientosResumen();
@@ -755,14 +755,14 @@ function vencimientosBannerHTML() {
       </div>`;
     }).join('');
   };
- 
+
   if(vencidos.length === 0 && porvencer.length === 0) {
     return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="var(--green)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
       Sin vencimientos pendientes. Todas las calificaciones activas están vigentes.
     </div>`;
   }
- 
+
   let html = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:11px 14px">`;
   if(vencidos.length) {
     html += `<div style="margin-bottom:${porvencer.length?'11px':'0'}">
@@ -785,12 +785,12 @@ function vencimientosBannerHTML() {
   html += `</div>`;
   return html;
 }
- 
+
 // Revalidar desde la vista del soldador: maneja una o varias posiciones del PST
 function revalidarSoldador(soldador, pst) {
   const regs = (db.vencimientos||[]).filter(v =>
     v.pst === pst && (v.soldador||'').toLowerCase() === (soldador||'').toLowerCase());
- 
+
   let pos = '';
   if(regs.length > 1) {
     const opciones = regs.map((v,i) => `${i+1}. Posición ${v.posicion||'(sin pos)'}`).join('\n');
@@ -815,11 +815,11 @@ function revalidarSoldador(soldador, pst) {
   } else if(regs.length === 1) {
     pos = regs[0].posicion || '';
   }
- 
+
   const ok = revalidarSoldadorPST(soldador, pst, pos);
   if(ok) { renderWPQ(); alert('✓ Revalidado.'); }
 }
- 
+
 // Revalidar: actualiza el vencimiento de un soldador+PST a nuevo mes/año
 function revalidarSoldadorPST(soldador, pst, pos) {
   const nuevo = prompt(`Revalidación de ${soldador} — PST ${pst}${pos?(' ('+pos+')'):''}\n\nIngresá el nuevo vencimiento como MM/AAAA (ej: 06/2027):`);
@@ -828,7 +828,7 @@ function revalidarSoldadorPST(soldador, pst, pos) {
   if(!m) { alert('Formato inválido. Usá MM/AAAA, ej: 06/2027.'); return false; }
   const mes = parseInt(m[1],10), anio = parseInt(m[2],10);
   if(mes<1||mes>12) { alert('El mes debe estar entre 1 y 12.'); return false; }
- 
+
   // Buscar registro existente
   let v = (db.vencimientos||[]).find(x =>
     x.pst === pst && (x.posicion||'') === (pos||'') &&
@@ -845,4 +845,3 @@ function revalidarSoldadorPST(soldador, pst, pos) {
   saveDB();
   return true;
 }
- 
