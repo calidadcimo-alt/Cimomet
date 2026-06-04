@@ -33,21 +33,26 @@ function ensayoAplica(textUp, nombresEnsayo){
     const n = normTxt(nombre);
     let idx = t.indexOf(n);
     while(idx !== -1){
-      // Ventana de texto justo después del nombre del ensayo
-      const after = t.slice(idx + n.length, idx + n.length + 70);
-      // Si lo primero significativo es N/A → este ensayo no aplica (seguir buscando otra mención)
-      const naMatch = after.match(/^[\s\S]{0,40}?\bN\s*\/?\s*A\b/);
+      // Ventana hasta el fin de la fila (separador "\n" de tablas docx) o 120 chars
+      const rowEnd = t.indexOf('\n', idx);
+      const limit = rowEnd === -1 ? idx + n.length + 90 : Math.min(rowEnd, idx + n.length + 120);
+      const after = t.slice(idx + n.length, limit);
+      // NO aplica si en la misma fila aparece "N/A" o guiones (---- = casilla vacía)
+      const naMatch = after.match(/\bN\s*\/?\s*A\b|-{3,}/);
       const normaMatch = after.match(/\b(AWS|ASME|DIN|ASTM|ISO|API)\b/);
       if(normaMatch && (!naMatch || normaMatch.index < naMatch.index)){
-        return true; // hay una norma antes que un N/A → aplica
+        return true; // hay norma antes que N/A → aplica
       }
-      if(!naMatch){
-        return true; // no hay N/A cerca → asumimos que aplica
+      if(!naMatch && normaMatch){
+        return true; // hay norma y no N/A → aplica
+      }
+      if(!naMatch && !normaMatch && after.replace(/[\s|]/g,'').length > 3){
+        return true; // contenido real sin N/A → aplica
       }
       idx = t.indexOf(n, idx + n.length);
     }
   }
-  return false; // todas las menciones tenían N/A inmediato → no aplica
+  return false; // todas las menciones con N/A o vacías → no aplica
 }
 
 // Ensayos sujetos a verificación de N/A, con sus nombres tal como aparecen en el F-07
@@ -145,15 +150,35 @@ async function loadF07file(file){
         if(urun.length>=5) text+=' '+urun.join('');
       }catch(e){}
     } else {
-      // .docx (ZIP): use JSZip
+      // .docx (ZIP): leer document.xml preservando la estructura de tabla
       const zip=await JSZip.loadAsync(arrayBuffer);
-      const xmlFiles=['word/document.xml','word/header1.xml','word/footer1.xml'];
-      for(const fname of xmlFiles){
+      const docFile=zip.file('word/document.xml');
+      if(docFile){
+        const xml=await docFile.async('string');
+        // Extraer fila por fila (<w:tr>) y celda por celda (<w:tc>) para preservar
+        // la relación ensayo↔norma. Cada celda → texto concatenado; celdas separadas por " | "; filas por " \n "
+        const rows=xml.match(/<w:tr\b[\s\S]*?<\/w:tr>/g);
+        if(rows && rows.length){
+          for(const row of rows){
+            const cells=row.match(/<w:tc\b[\s\S]*?<\/w:tc>/g)||[];
+            const cellTexts=cells.map(cell=>{
+              const parts=[]; let m; const re=/<w:t[^>]*>([^<]*)<\/w:t>/g;
+              while((m=re.exec(cell))!==null) parts.push(m[1]);
+              return parts.join('').trim();
+            });
+            text += cellTexts.join(' | ') + ' \n ';
+          }
+        }
+        // Fallback: además agregar todo el texto plano (para encabezados fuera de tablas)
+        const reAll=/<w:t[^>]*>([^<]*)<\/w:t>/g; let ma;
+        while((ma=reAll.exec(xml))!==null) text+=ma[1]+' ';
+      }
+      // Headers/footers (datos del encabezado)
+      for(const fname of ['word/header1.xml','word/header2.xml','word/footer1.xml']){
         const f=zip.file(fname);
         if(f){
           const xml=await f.async('string');
-          const re=/<w:t[^>]*>([^<]*)<\/w:t>/g;
-          let m;
+          const re=/<w:t[^>]*>([^<]*)<\/w:t>/g; let m;
           while((m=re.exec(xml))!==null) text+=m[1]+' ';
         }
       }
@@ -178,23 +203,23 @@ function processF07(text,filename){
   // Extract header data from F-07 — always overwrite with F-07 values
   let m;
 
-  // OT number — look for OT N°: XX or similar
-  m=text.match(/OT[.\s]*N[°º][\s.:]*([\w\d]+)/i);
-  if(m) ot.num=m[1].replace(/[^\w\d]/g,'');
+  // OT number — "OT N° 584", "OT N  584", "OT: 584" (acepta separación variable)
+  m=text.match(/\bOT[\s.:]*N?[°º]?[\s.:]*(\d{3,4})\b/i);
+  if(m) ot.num=m[1];
 
-  // Cliente — appears after "CLIENTE:" label
-  // The F-07 header has: CLIENTE: TERNIUM  (or similar)
-  m=text.match(/CLIENTE[:\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s.&]{1,30}?)(?=\s{2,}|\bOT\b|\bOBRA\b|\bPLANO\b|\bEQUIPO\b|\bHOJA\b|\bOFERTA\b|\b\d)/i);
-  if(m) ot.cliente=m[1].trim().replace(/\.$/,'').toUpperCase();
+  // Cliente — "CLIENTE: PECOM" (tomar la última aparición = la del header)
+  let cliMatches=[...text.matchAll(/CLIENTE[:\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s.&\-]{1,30}?)(?=\s{2,}|\s*\||\bREF\b|\bOT\b|\bOBRA\b|\bPLANO\b|\bEQUIPO\b|\bHOJA\b|\bOFERTA\b|\bO\s|\b\d|$)/gi)];
+  if(cliMatches.length){ ot.cliente=cliMatches[cliMatches.length-1][1].trim().replace(/\.$/,'').toUpperCase(); }
 
-  // Equipo / Obra — appears right after "EQUIPO: N°" label in F-07 header
+  // Obra / descripción — varios formatos: "EQUIPO: N° XXX", tras "HOJA: 1 DE: 2", o "DESCRIPCIÓN DE LA ACTIVIDAD:"
   m=text.match(/EQUIPO[:\s]+N[°º]\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s]+?)(?=\s+(?:\d[A-Za-z]|[A-Z]{2,}\d|\d{3,}|Plano|OFERTA|CIMOMET|N°))/i);
-  if(!m) m=text.match(/EQUIPO[:\s]+(?:N[°º][\s\d]*)([A-ZÁÉÍÓÚÑ][^\n]{3,60?})(?=\s+(?:Plano|OFERTA|OT|CLIENTE|HOJA))/i);
-  if(m) ot.obra=m[1].trim().replace(/\s+/g,' ').toUpperCase();
+  if(!m) m=text.match(/HOJA[:\s]*\d+\s*DE[:\s]*\d+\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ0-9,\s.\-()]{5,80}?)(?=\s+PLANO|\s+O\s+TECNICA|\s+O\.|\s+CLIENTE|\s+REF|\s*\|)/i);
+  if(!m) m=text.match(/DESCRIPCI[ÓO]?N?\s+DE\s+LA\s+ACTIVIDAD[:\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ0-9,\s.\-()]{3,60}?)(?=\s+DESCRIPCI|\s+DOCUMENTO|\s+CIMOMET|\s*\||$)/i);
+  if(m){ ot.obra=m[1].trim().replace(/\s+/g,' ').replace(/,([A-Z])/g,', $1').toUpperCase(); }
 
-  // Plano
-  m=text.match(/[Pp]lano[:\s]+(?:N[°º][\s]*)?([\w\d][\w\d\-\.]+)/i);
-  if(m) ot.plano=m[1].trim();
+  // Plano — "PLANO N° VARIOS" o "PLANO: 123-45"
+  m=text.match(/PLANO[:\s]+(?:N[°º]?[\s]*)?([\w\dÁÉÍÓÚÑ][\w\dÁÉÍÓÚÑ\-\.\/\s]{1,30}?)(?=\s{2,}|\s*\||\bO\s+TECNICA|\bO\.|\bCLIENTE|\bOFERTA|\bREF|$)/i);
+  if(m){ ot.plano=m[1].trim().replace(/\s+/g,' '); }
 
   // Año — extract from 4-digit years OR 2-digit dates like 10/03/26
   const years4=text.match(/\b(20\d{2})\b/g)||[];
