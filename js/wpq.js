@@ -146,10 +146,11 @@ function renderWPQpstLevel() {
   } else {
     cards = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">` +
       keys.map(pst => {
-const count = psts[pst].length;
+        const count = psts[pst].length;
         const tieneSold = count > 0;
         return `<div class="wpq-folder" onclick="wpqOpenPST('${escAttr(pst)}')">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="${tieneSold?'var(--accent)':'var(--text3)'}" style="margin:0 auto">            <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="${tieneSold?'var(--accent)':'var(--text3)'}" style="margin:0 auto">
+            <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
           </svg>
           <div style="font-size:13px;font-weight:600;margin-top:8px">PST ${esc(pst)}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px">${count} soldador${count===1?'':'es'}</div>
@@ -158,7 +159,7 @@ const count = psts[pst].length;
   }
 
   main.innerHTML = `<div class="fade-in">
-    <div style="position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 0;margin:-12px 0 4px">
+    <div style="position:sticky;top:0;z-index:10;background:var(--bg);padding:24px 0 12px;margin:-24px 0 4px">
       ${vencimientosBannerHTML()}
     </div>
     <div style="margin-bottom:16px;color:var(--text2);font-size:13px">
@@ -203,10 +204,8 @@ function renderWPQsoldadoresLevel() {
     cards = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">` +
       soldadores.map(s => {
         const n = (s.files||[]).length;
-        return `<div class="wpq-folder" onclick="wpqOpenSoldador('${escAttr(s.id)}')"
-          style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 14px;text-align:center;cursor:pointer;transition:all .15s"
-          onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="var(--text2)" style="margin:0 auto">
+        return `<div class="wpq-folder" onclick="wpqOpenSoldador('${escAttr(s.id)}')">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="${n>0?'var(--accent)':'var(--text3)'}" style="margin:0 auto">
             <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
           </svg>
           <div style="font-size:13px;font-weight:600;margin-top:8px">${esc(s.soldador)}</div>
