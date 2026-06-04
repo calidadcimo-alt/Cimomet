@@ -380,9 +380,10 @@ function extractPSTFromFilename(filename) {
 }
 
 function extractPSTsFromText(text) {
-  // Extract all PST numbers from F-07 text, e.g. "PST Nº 14/08", "PST N  14/08"
+  // Extract all PST numbers from F-07 text, e.g. "PST Nº 14/08", "PST N  14/08", "PST N·ª 04/05"
+  // Acepta cualquier carácter no numérico (hasta 8) entre "PST" y el número (cubre °, º, ·ª, N°, etc.)
   const psts = new Set();
-  const re = /PST[\s\-_Nnoº°#rRoO]*(\d{1,2})[\-\/\.\s](\d{2,4})/gi;
+  const re = /PST[^\d]{0,8}(\d{1,2})[\-\/\.\s](\d{2,4})/gi;
   let m;
   while((m = re.exec(text)) !== null) {
     psts.add(m[1] + '-' + m[2]);
