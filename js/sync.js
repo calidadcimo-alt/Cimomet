@@ -30,7 +30,7 @@ async function pushOT(ot) {
   try {
     const row = {
       id: ot.id, num: ot.num, cliente: ot.cliente, obra: ot.obra||'',
-      plano: ot.plano||'', anio: ot.anio||'', estado: ot.estado||'active',
+      plano: ot.plano||'', anio: ot.anio||'', estado: ot.estado||'active', tipo: ot.tipo||'',
       items: ot.items||null, custom_items: ot.customItems||[],
       manual_procs: ot.manualProcs||[], excluded_procs: ot.excludedProcs||[],
       f07s: ot.f07s||[], f07text: ot.f07text||'',
@@ -108,7 +108,7 @@ function syncToCloud(delay) {
       // Upsert all OTs (one row each)
       const otRows = (db.ots||[]).map(ot => ({
         id: ot.id, num: ot.num, cliente: ot.cliente, obra: ot.obra||'',
-        plano: ot.plano||'', anio: ot.anio||'', estado: ot.estado||'active',
+        plano: ot.plano||'', anio: ot.anio||'', estado: ot.estado||'active', tipo: ot.tipo||'',
         items: ot.items||null, custom_items: ot.customItems||[],
         manual_procs: ot.manualProcs||[], excluded_procs: ot.excludedProcs||[],
         f07s: ot.f07s||[], f07text: ot.f07text||'',
@@ -202,7 +202,7 @@ async function syncFromCloud() {
       // Rebuild db from cloud tables
       db.ots = otRows.map(r => ({
         id: r.id, num: r.num, cliente: r.cliente, obra: r.obra,
-        plano: r.plano, anio: r.anio, estado: r.estado,
+        plano: r.plano, anio: r.anio, estado: r.estado, tipo: r.tipo||'',
         items: r.items, customItems: r.custom_items||[],
         manualProcs: r.manual_procs||[], excludedProcs: r.excluded_procs||[],
         f07s: r.f07s||[], f07text: r.f07text||'',

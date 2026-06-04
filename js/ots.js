@@ -261,6 +261,14 @@ function renderTabDatos(ot,el){
         <div class="field full"><label>Obra / Equipo</label><input type="text" id="d-obra" value="${esc(ot.obra||'')}" placeholder="Descripción del equipo o estructura" oninput="autosaveField('obra',this.value.toUpperCase())"></div>
         <div class="field"><label>N° Plano</label><input type="text" id="d-plano" value="${esc(ot.plano||'')}" oninput="autosaveField('plano',this.value)"></div>
         <div class="field"><label>Año</label><input type="text" id="d-anio" value="${esc(ot.anio||'')}" oninput="autosaveField('anio',this.value)"></div>
+        <div class="field"><label>Tipo (afecta detección de ítems)</label>
+          <select id="d-tipo" onchange="autosaveField('tipo',this.value)">
+            <option value="" ${!ot.tipo?'selected':''}>Sin definir</option>
+            <option value="equipos" ${ot.tipo==='equipos'?'selected':''}>Equipos (tanques, recipientes)</option>
+            <option value="estructuras" ${ot.tipo==='estructuras'?'selected':''}>Estructuras</option>
+            <option value="ambos" ${ot.tipo==='ambos'?'selected':''}>Ambos</option>
+          </select>
+        </div>
         <div class="field full"><label>Estado</label>
           <select id="d-estado" onchange="autosaveField('estado',this.value)">
             <option value="active" ${ot.estado==='active'?'selected':''}>En proceso</option>

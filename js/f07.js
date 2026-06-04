@@ -2,6 +2,61 @@
 // f07.js — Carga y procesamiento del Plan de Inspección F-07
 // ════════════════════════════════════════════════════════════
 
+// Normaliza texto: mayúsculas, sin acentos
+function normTxt(s){
+  return String(s||'').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
+// Detecta el tipo de F-07 por palabras clave. Devuelve 'equipos' | 'estructuras' | null
+function detectF07Tipo(textUp){
+  const t = normTxt(textUp);
+  // Señales de EQUIPOS (tanques, recipientes a presión)
+  const equiposKW = ['ASME VIII','CONTROL DIMENSIONAL TKS','PRUEBA HIDRAULICA','PRUEBA DE ESTANQUEIDAD',
+    'PRUEBA DE VACIO','CANCAMOS DE IZAJE','TANQUES','EQUIPO.','ENVOLVENTE','CABEZALES','CASQUETES'];
+  // Señales de ESTRUCTURAS
+  const estructKW = ['AWS D1.1','AWS D1-1','DIN 8570','CABRIADAS','CORREAS','COLUMNAS',
+    'PARTICULAS MAGNETIZABLES','ALIVIO DE TENSIONES','A-572','A325','PERFILERIA','ESTRUCTURA'];
+  let eq=0, es=0;
+  equiposKW.forEach(k=>{ if(t.includes(normTxt(k))) eq++; });
+  estructKW.forEach(k=>{ if(t.includes(normTxt(k))) es++; });
+  if(eq===0 && es===0) return null;
+  if(eq>0 && es>0)   return (eq>=es) ? 'equipos' : 'estructuras'; // dominante; "ambos" se arma al acumular
+  return eq>es ? 'equipos' : 'estructuras';
+}
+
+// ¿Un ensayo aplica? Busca el nombre del ensayo en el texto y mira si lo que le sigue
+// inmediatamente (en los próximos ~60 caracteres) es "N/A". Si es N/A → NO aplica.
+// Si encuentra una norma (AWS/ASME/DIN/etc.) o cualquier otra cosa → SÍ aplica.
+function ensayoAplica(textUp, nombresEnsayo){
+  const t = normTxt(textUp);
+  for(const nombre of nombresEnsayo){
+    const n = normTxt(nombre);
+    let idx = t.indexOf(n);
+    while(idx !== -1){
+      // Ventana de texto justo después del nombre del ensayo
+      const after = t.slice(idx + n.length, idx + n.length + 70);
+      // Si lo primero significativo es N/A → este ensayo no aplica (seguir buscando otra mención)
+      const naMatch = after.match(/^[\s\S]{0,40}?\bN\s*\/?\s*A\b/);
+      const normaMatch = after.match(/\b(AWS|ASME|DIN|ASTM|ISO|API)\b/);
+      if(normaMatch && (!naMatch || normaMatch.index < naMatch.index)){
+        return true; // hay una norma antes que un N/A → aplica
+      }
+      if(!naMatch){
+        return true; // no hay N/A cerca → asumimos que aplica
+      }
+      idx = t.indexOf(n, idx + n.length);
+    }
+  }
+  return false; // todas las menciones tenían N/A inmediato → no aplica
+}
+
+// Ensayos sujetos a verificación de N/A, con sus nombres tal como aparecen en el F-07
+const ENSAYO_NA_CHECK = {
+  "INFORMES DE LIQUIDOS PENETRANTES": ["LIQUIDOS PENETRANTES"],
+  "INFORME DE GAMMAGRAFIA":           ["ENSAYO DE RADIOGRAFIA","RADIOGRAFIADO","GAMMAGRAFIA"],
+  "INFORME DE ULTRASONIDO":           ["ULTRASONIDO"],
+};
+
 function renderTabF07(ot,el){
   const f07sHTML = ot.f07s && ot.f07s.length ? ot.f07s.map((f,i)=>`
     <div class="f07-card">
@@ -154,10 +209,28 @@ function processF07(text,filename){
 
   // Auto-detect standard items
   const textUp=text.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+
+  // ── Detección de TIPO de F-07 (equipos / estructuras) ──────────
+  const tipoDetectado = detectF07Tipo(textUp);
+  // Acumular en ot.tipo: si ya tenía otro tipo y ahora carga el opuesto → "ambos"
+  if(tipoDetectado){
+    if(!ot.tipo || ot.tipo===tipoDetectado) ot.tipo = tipoDetectado;
+    else ot.tipo = 'ambos';
+  }
+
+  // ── Detección de ítems con filtro N/A ──────────────────────────
+  // Un ensayo END solo se agrega si en el F-07 aparece CON una norma aplicable (no "N/A")
   const detectedItems=ALL_ITEMS.filter(item=>{
     const kws=ITEM_KW[item];
     if(!kws) return true;
-    return kws.some(kw=>textUp.includes(kw.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')));
+    // ¿El ítem aparece mencionado?
+    const aparece = kws.some(kw=>textUp.includes(normTxt(kw)));
+    if(!aparece) return false;
+    // Si es un ensayo sujeto a N/A, verificar que NO esté marcado como N/A
+    if(item in ENSAYO_NA_CHECK){
+      return ensayoAplica(textUp, ENSAYO_NA_CHECK[item]);
+    }
+    return true;
   });
   // Always pre-select default items even if not in F-07
   const allDetected = [...new Set([...DEFAULT_ITEMS, ...detectedItems])];
