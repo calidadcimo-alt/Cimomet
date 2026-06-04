@@ -14,7 +14,6 @@ function openNewOTModal(){
   ['new-ot','new-cliente','new-obra','new-plano'].forEach(id=>{
     document.getElementById(id).value='';
   });
-  document.getElementById('new-anio').value=new Date().getFullYear();
   // Reset dropzone
   document.getElementById('new-ot-dz').className='dropzone';
   document.getElementById('new-ot-dz-icon').textContent='📄';
@@ -77,11 +76,6 @@ async function newOTloadF07(file){
     m=text.match(/[Pp]lano[:\s]+N[°º]\s*([\w\d][\w\d\-\.]+)/i);
     if(m) document.getElementById('new-plano').value=m[1].trim();
 
-    const years4=(text.match(/\b(20\d{2})\b/g)||[]);
-    const years2=(text.match(/\d{1,2}[\/\-]\d{1,2}[\/\-](\d{2})\b/g)||[]).map(d=>'20'+d.split(/[\/\-]/).pop());
-    const allYears=[...years4,...years2].filter(y=>y>='2020'&&y<='2035');
-    if(allYears.length) document.getElementById('new-anio').value=allYears.sort().pop();
-
     // Store file for later processing after OT is created
     window._pendingF07={file,text,arrayBuffer};
 
@@ -113,7 +107,7 @@ function createOT(){
     cliente: document.getElementById('new-cliente').value.trim().toUpperCase(),
     obra:    document.getElementById('new-obra').value.trim().toUpperCase(),
     plano:   document.getElementById('new-plano').value.trim(),
-    anio:    document.getElementById('new-anio').value.trim() || String(new Date().getFullYear()),
+    anio:    String(new Date().getFullYear()),
     estado:  'active',
     items:   undefined,   // set by F-07; undefined = no auto-match for procedures
     f07s:    [],
