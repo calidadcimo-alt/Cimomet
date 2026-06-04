@@ -113,6 +113,12 @@ function renderWPQ() {
   const actionsEl = document.getElementById('topbar-actions');
   if(titleEl) titleEl.textContent = 'WPQ — Calificación de soldadores';
 
+  // El banner de vencimientos solo se muestra en el nivel 1 (lista de PST)
+  if(wpqNav.level !== 'pst') {
+    const slot = document.getElementById('wpq-banner-slot');
+    if(slot){ slot.style.display = 'none'; slot.innerHTML = ''; }
+  }
+
   if(wpqNav.level === 'pst') {
     if(actionsEl) actionsEl.innerHTML =
       `<button class="btn btn-secondary btn-sm" onclick="showProceduresMenu()">← Procedimientos</button>
@@ -159,9 +165,6 @@ function renderWPQpstLevel() {
   }
 
   main.innerHTML = `<div class="fade-in">
-    <div style="position:sticky;top:0;z-index:10;background:var(--bg);padding:24px 40px 12px;margin:-24px -40px 4px">
-      ${vencimientosBannerHTML()}
-    </div>
     <div style="margin-bottom:16px;color:var(--text2);font-size:13px">
       Una carpeta por cada WPS cargado (por número PST). Hacé click para ver y cargar los soldadores calificados.
     </div>
@@ -169,6 +172,10 @@ function renderWPQpstLevel() {
     <input type="file" id="venc-excel-input" accept=".xls,.xlsx" style="display:none"
       onchange="if(this.files[0]) importVencimientosExcel(this.files[0])">
   </div>`;
+
+  // Banner de vencimientos en el slot fijo (fuera del scroll)
+  const slot = document.getElementById('wpq-banner-slot');
+  if(slot){ slot.innerHTML = vencimientosBannerHTML(); slot.style.display = 'block'; }
 }
 
 function wpqOpenPST(pst) {

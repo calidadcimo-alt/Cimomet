@@ -8,8 +8,12 @@ let currentScreen = 'home';
 // Muestra u oculta el botón "Inicio" según la pantalla
 function updateHomeButton() {
   const btn = document.getElementById('btn-home');
-  if(!btn) return;
-  btn.style.display = (currentScreen === 'home') ? 'none' : 'inline-flex';
+  if(btn) btn.style.display = (currentScreen === 'home') ? 'none' : 'inline-flex';
+  // Ocultar el banner de vencimientos WPQ si no estamos en la vista WPQ
+  if(currentScreen !== 'wpq') {
+    const slot = document.getElementById('wpq-banner-slot');
+    if(slot){ slot.style.display = 'none'; slot.innerHTML = ''; }
+  }
 }
 
 // ── Pantalla de inicio ───────────────────────────────────────
