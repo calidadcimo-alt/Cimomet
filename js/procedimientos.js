@@ -136,6 +136,24 @@ function showProceduresView(section) {
   renderProceduresLibrary();
 }
 
+// Ordena una lista de procedimientos: los WPS por número de PST, el resto alfabético
+function sortProcList(list) {
+  const pstKey = (p) => {
+    const pst = (typeof extractPSTFromFilename==='function')
+      ? extractPSTFromFilename(p.filename || p.name || '') : null;
+    if(!pst) return null;
+    const parts = pst.split('-').map(n => parseInt(n,10) || 0);
+    return parts[0]*1000 + (parts[1]||0);
+  };
+  return [...list].sort((a,b) => {
+    const ka = pstKey(a), kb = pstKey(b);
+    if(ka !== null && kb !== null) return ka - kb;          // ambos WPS → por PST
+    if(ka !== null) return -1;
+    if(kb !== null) return 1;
+    return (a.name||'').localeCompare(b.name||'', 'es');     // resto → alfabético
+  });
+}
+
 function renderProceduresLibrary() {
   const el = document.getElementById('main-content');
   const allProcs = db.procedures || [];
@@ -193,7 +211,7 @@ function renderProceduresLibrary() {
             <span class="chip">${list.length} archivo${list.length>1?'s':''}</span>
           </div>
           <div style="display:flex;flex-direction:column;gap:7px">
-            ${list.map(procCardHtml).join('')}
+            ${sortProcList(list).map(procCardHtml).join('')}
           </div>
         </div>`).join('')}
   </div>`;
@@ -390,7 +408,7 @@ function renderTabProcedimientos(ot, el) {
         </summary>
         <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);
           padding:10px;display:flex;flex-direction:column;gap:7px">
-          ${procs.length ? alpha(procs).map(renderCard).join('') :
+          ${procs.length ? sortProcList(procs).map(renderCard).join('') :
             `<p style="font-size:13px;color:var(--text3);margin:4px 0">${emptyMsg}</p>`}
         </div>
       </details>`;
