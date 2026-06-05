@@ -115,6 +115,7 @@ function createOT(){
   };
   db.ots.unshift(ot);
   saveDB();
+  pushOT(ot);   // subir la nueva OT a la nube
   closeModal('modal-new-ot');
   renderSidebar();
   currentOT = ot.id;

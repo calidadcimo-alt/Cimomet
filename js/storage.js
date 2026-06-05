@@ -94,6 +94,11 @@ function saveDB(){
   try{ localStorage.setItem('cimomet_db', JSON.stringify(safe)); }catch(e){
     alert('Error al guardar configuración: ' + e.message);
   }
+  // Subir a la nube la OT actual (si hay una seleccionada)
+  if(typeof currentOT !== 'undefined' && currentOT && typeof pushOT === 'function'){
+    const ot = db.ots.find(o => o.id === currentOT);
+    if(ot) pushOT(ot);
+  }
 }
 
 // ── Sidebar ──────────────────────────────────────────────────────────────────
