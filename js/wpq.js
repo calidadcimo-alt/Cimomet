@@ -197,6 +197,19 @@ function renderWPQsoldadoresLevel() {
     <span style="font-size:13px;color:var(--text2)">WPQ / <strong style="color:var(--text)">PST ${esc(wpqNav.pst)}</strong></span>
   </div>`;
 
+  // Zona de arrastre: permite soltar VARIAS carpetas de soldadores a la vez.
+  // (El picker nativo de carpetas solo deja elegir una; arrastrando se cargan varias.)
+  const dz = `<div class="dropzone" style="margin-bottom:16px"
+      onclick="document.getElementById('wpq-folder-input').click()"
+      ondragover="event.preventDefault();this.classList.add('over')"
+      ondragenter="event.preventDefault();this.classList.add('over')"
+      ondragleave="this.classList.remove('over')"
+      ondrop="handleWPQDrop(event)">
+      <div class="dz-icon">📂</div>
+      <div class="dz-text">Arrastrá acá <strong>una o varias carpetas</strong> de soldadores, o hacé clic para elegir una.<br>
+      Subí los archivos en <strong>PDF</strong> (los Excel se omiten: exportalos a PDF desde Excel).</div>
+    </div>`;
+
   let cards = '';
   if(soldadores.length === 0) {
     cards = `<div class="empty fade-in" style="padding:40px">
@@ -223,7 +236,7 @@ function renderWPQsoldadoresLevel() {
       }).join('') + `</div>`;
   }
 
-  main.innerHTML = `<div class="fade-in">${bc}${cards}
+  main.innerHTML = `<div class="fade-in">${bc}${dz}${cards}
     <input type="file" id="wpq-folder-input" webkitdirectory directory multiple
       style="display:none" onchange="handleWPQFolderUpload(this.files)">
   </div>`;
@@ -247,7 +260,7 @@ function renderWPQarchivosLevel() {
 
   // Estado de vencimiento actual de este soldador para este PST
   let vencInfo = '';
-  let revalBtn = '';
+  let actionsRight = '';
   if(!isInactivos) {
     const regs = (db.vencimientos||[]).filter(v =>
       v.pst === entry.pst &&
@@ -262,7 +275,11 @@ function renderWPQarchivosLevel() {
       }).join(' · ');
       vencInfo = `<div style="font-size:11px;margin-top:4px">${partes}</div>`;
     }
-    revalBtn = `<button class="btn btn-primary btn-sm" onclick="revalidarSoldador('${escAttr(entry.soldador)}','${escAttr(entry.pst)}')" style="margin-left:auto">↻ Revalidar</button>`;
+    const printAllBtn = (entry.files||[]).length
+      ? `<button class="btn btn-secondary btn-sm" title="Imprime todos los archivos en un solo PDF, primero la calificación inicial y después las revalidaciones" onclick="printAllWPQForSoldador('${escAttr(entry.id)}')">🖨 Imprimir todo</button>`
+      : '';
+    const revalidar = `<button class="btn btn-primary btn-sm" onclick="revalidarSoldador('${escAttr(entry.soldador)}','${escAttr(entry.pst)}')">↻ Revalidar</button>`;
+    actionsRight = `<div style="display:flex;gap:8px;margin-left:auto">${printAllBtn}${revalidar}</div>`;
   }
 
   const bc = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
@@ -271,7 +288,7 @@ function renderWPQarchivosLevel() {
       <span style="font-size:13px;color:var(--text2)">WPQ / PST ${esc(entry.pst)} / <strong style="color:var(--text)">${esc(entry.soldador)}</strong></span>
       ${vencInfo}
     </div>
-    ${revalBtn}
+    ${actionsRight}
   </div>`;
 
   const hint = isInactivos
@@ -372,8 +389,8 @@ function wpqRestoreScroll(key) {
 
 // ── Carga de carpetas (múltiples soldadores) ─────────────────
 
-async function handleWPQFolderUpload(fileList) {
-  if(!fileList || fileList.length === 0) return;
+async function handleWPQFolderUpload(input) {
+  if(!input || input.length === 0) return;
   const pst = wpqNav.pst;
   if(!pst) { alert('Abrí primero una carpeta de PST.'); return; }
 
@@ -383,14 +400,19 @@ async function handleWPQFolderUpload(fileList) {
   //  (B) Una sola carpeta de soldador con archivos adentro:
   //      "Juan Perez/archivo.pdf"           → soldador = "Juan Perez"
   // Detectamos la profundidad máxima de las rutas para decidir.
+  // `input` puede ser un FileList (picker, usa webkitRelativePath) o un
+  // array de {file, relPath} (arrastre de varias carpetas a la vez).
   const paths = [];
   const IGNORE = /^(thumbs\.db|desktop\.ini|\.ds_store)$/i;
-  for(const file of fileList) {
+  for(const item of Array.from(input)) {
+    const file = item && item.file ? item.file : item;
+    if(!file || !file.name) continue;
     if(IGNORE.test(file.name)) continue;        // basura del sistema (Thumbs.db, etc.)
     if(file.name.startsWith('.')) continue;       // archivos ocultos
-    const rel = file.webkitRelativePath || file.name;
+    const rel = (item && item.relPath) ? item.relPath : (file.webkitRelativePath || file.name);
     paths.push({ file, parts: rel.split('/').filter(Boolean) });
   }
+  if(paths.length === 0) { setSyncStatus('idle'); return; }
   // Profundidad: cantidad de segmentos de carpeta (sin contar el archivo)
   const maxDepth = Math.max(...paths.map(p => p.parts.length));
 
@@ -422,6 +444,7 @@ async function handleWPQFolderUpload(fileList) {
 
   let totalFiles = 0, doneFiles = 0;
   soldadorNames.forEach(s => totalFiles += bySoldador[s].length);
+  const excelOmitidos = [];   // Excel ya no se convierten: se suben PDF directos
 
   for(const soldador of soldadorNames) {
     const files = bySoldador[soldador];
@@ -434,12 +457,22 @@ async function handleWPQFolderUpload(fileList) {
     }
 
     for(const file of files) {
+      const lower = file.name.toLowerCase();
+
+      // Los Excel NO se convierten en el navegador (no se pueden conservar logo
+      // ni firmas). Hay que subir el PDF exportado desde Excel. Se omite y se avisa.
+      if(/\.(xlsx?|xlsm|xlsb|csv)$/i.test(lower)) {
+        excelOmitidos.push(file.name);
+        doneFiles++;
+        setSyncStatus('syncing', `Subiendo ${doneFiles}/${totalFiles}…`);
+        continue;
+      }
+
       try {
-        const fileType = file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'other';
-        const mimeType = file.type || (fileType==='pdf' ? 'application/pdf' : 'application/octet-stream');
-        const fileId = 'wpqf_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
         const ab = await file.arrayBuffer();
         const bytes = new Uint8Array(ab);
+        const mimeType = file.type || (lower.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
+        const fileId = 'wpqf_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
         let b64=''; const CHUNK=8192;
         for(let i=0;i<bytes.length;i+=CHUNK) b64 += String.fromCharCode.apply(null, bytes.subarray(i,i+CHUNK));
         b64 = btoa(b64);
@@ -463,6 +496,145 @@ async function handleWPQFolderUpload(fileList) {
   setSyncStatus('ok', 'Guardado');
   setTimeout(()=>setSyncStatus('idle'), 2000);
   renderWPQ();
+
+  if(excelOmitidos.length) {
+    alert('No se cargaron estos archivos Excel (subí la versión PDF exportada desde Excel):\n\n• ' +
+      excelOmitidos.join('\n• '));
+  }
+}
+
+// ── Arrastrar y soltar varias carpetas a la vez ──────────────
+// El picker nativo (webkitdirectory) solo permite elegir UNA carpeta.
+// Con arrastre podemos soltar varias carpetas de soldadores juntas.
+async function handleWPQDrop(ev) {
+  ev.preventDefault();
+  const dz = ev.currentTarget;
+  if(dz && dz.classList) dz.classList.remove('over');
+
+  const dt = ev.dataTransfer;
+  const items = dt && dt.items;
+
+  // Capturamos las entries de forma SÍNCRONA: la lista de items se invalida
+  // apenas el handler hace un await, así que primero recolectamos todo.
+  const entries = [];
+  if(items && items.length && items[0].webkitGetAsEntry) {
+    for(let i=0;i<items.length;i++) {
+      const e = items[i].webkitGetAsEntry && items[i].webkitGetAsEntry();
+      if(e) entries.push(e);
+    }
+  }
+
+  let collected = [];
+  if(entries.length) {
+    setSyncStatus('syncing', 'Leyendo carpetas…');
+    for(const e of entries) await wpqWalkEntry(e, '', collected);
+  } else if(dt && dt.files && dt.files.length) {
+    // Navegador sin FileSystem API: archivos sueltos
+    collected = Array.from(dt.files).map(f => ({ file: f, relPath: f.name }));
+  }
+
+  if(collected.length === 0) { setSyncStatus('idle'); return; }
+  await handleWPQFolderUpload(collected);
+}
+
+// Recorre recursivamente una entry (archivo o carpeta) y arma {file, relPath}
+function wpqWalkEntry(entry, prefix, out) {
+  return new Promise((resolve) => {
+    if(!entry) return resolve();
+    const path = (prefix ? prefix + '/' : '') + entry.name;
+    if(entry.isFile) {
+      entry.file(
+        f => { out.push({ file: f, relPath: path }); resolve(); },
+        () => resolve()
+      );
+    } else if(entry.isDirectory) {
+      const reader = entry.createReader();
+      const all = [];
+      const readBatch = () => {
+        reader.readEntries(
+          async (batch) => {
+            if(!batch.length) {
+              // readEntries devuelve por lotes; al llegar vacío, recorrer hijos
+              for(const child of all) await wpqWalkEntry(child, path, out);
+              resolve();
+            } else {
+              all.push(...batch);
+              readBatch();
+            }
+          },
+          () => resolve()
+        );
+      };
+      readBatch();
+    } else {
+      resolve();
+    }
+  });
+}
+
+// ── Conversión Excel → PDF (en el navegador) ─────────────────
+// Lee el Excel con SheetJS y arma un PDF (una página por hoja) con jsPDF +
+// autoTable. Respeta celdas combinadas (colspan/rowspan vienen de sheet_to_html).
+async function wpqExcelToPdfBytes(file) {
+  const ab = await file.arrayBuffer();
+  return wpqExcelArrayToPdf(new Uint8Array(ab));
+}
+
+// Núcleo de conversión: recibe los bytes de un Excel y devuelve un PDF (Uint8Array).
+async function wpqExcelArrayToPdf(u8) {
+  if(typeof XLSX === 'undefined') throw new Error('SheetJS (XLSX) no disponible');
+  const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+  if(!jsPDFCtor) throw new Error('jsPDF no disponible');
+
+  const wb = XLSX.read(u8, { type: 'array' });
+
+  // Solo hojas con contenido
+  const sheetNames = wb.SheetNames.filter(n => wb.Sheets[n] && wb.Sheets[n]['!ref']);
+  if(sheetNames.length === 0) throw new Error('El Excel no tiene datos');
+
+  // Orientación según la hoja más ancha
+  let maxCols = 0;
+  for(const n of sheetNames) {
+    const r = XLSX.utils.decode_range(wb.Sheets[n]['!ref']);
+    maxCols = Math.max(maxCols, r.e.c - r.s.c + 1);
+  }
+  const orientation = maxCols > 8 ? 'landscape' : 'portrait';
+  const doc = new jsPDFCtor({ orientation, unit: 'pt', format: 'a4' });
+  const multi = sheetNames.length > 1;   // mostrar nombre de hoja solo si hay varias
+
+  let first = true;
+  for(const name of sheetNames) {
+    const sh = wb.Sheets[name];
+    const html = XLSX.utils.sheet_to_html(sh, { editable: false });
+
+    // autoTable necesita la tabla en el DOM; la ponemos oculta y la sacamos al final
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;left:-99999px;top:0;visibility:hidden';
+    wrap.innerHTML = html;
+    document.body.appendChild(wrap);
+    const tableEl = wrap.querySelector('table');
+
+    try {
+      if(!first) doc.addPage('a4', orientation);
+      if(multi) { doc.setFontSize(10); doc.text(String(name), 24, 26); }
+      const startY = multi ? 36 : 24;
+      if(tableEl) {
+        doc.autoTable({
+          html: tableEl,
+          startY: startY,
+          styles:     { fontSize: 7, cellPadding: 2, overflow: 'linebreak', lineWidth: 0.3, lineColor: [200,200,200], valign: 'middle' },
+          headStyles: { fillColor: [27,79,114], textColor: 255 },
+          margin:     { top: startY, left: 24, right: 24, bottom: 24 },
+          tableWidth: 'auto'
+        });
+      }
+    } finally {
+      document.body.removeChild(wrap);
+    }
+    first = false;
+  }
+
+  return new Uint8Array(doc.output('arraybuffer'));
 }
 
 // ── Acciones de archivos (ver / descargar / imprimir) ────────
@@ -513,6 +685,90 @@ async function printWPQFile(entryId, fileId) {
     if(win) { win.addEventListener('load', () => { try{ win.print(); }catch(e){} }); }
     setTimeout(() => URL.revokeObjectURL(url), 8000);
   } catch(e) { alert('Error al imprimir: ' + e.message); }
+}
+
+// Ordena los archivos de un soldador: primero la calificación inicial,
+// después las revalidaciones. La revalidación se detecta por el nombre
+// (contiene "revalid"/"revalidación"). Dentro de cada grupo respeta el orden actual.
+function wpqOrderInicialThenReval(files) {
+  const isReval = f => /revalid/i.test((f && f.name) || '');
+  const iniciales = files.filter(f => !isReval(f));
+  const revals    = files.filter(f =>  isReval(f));
+  return [...iniciales, ...revals];
+}
+
+// Imprime TODOS los archivos de un soldador en un solo PDF, en orden
+// (inicial → revalidación). Combina los PDF con pdf-lib. Los Excel viejos
+// (cargados antes de la conversión automática) se convierten al vuelo.
+async function printAllWPQForSoldador(entryId) {
+  const entry = (db.wpq||[]).find(e => e.id === entryId);
+  if(!entry) return;
+  const files = entry.files || [];
+  if(files.length === 0) { alert('Este soldador no tiene archivos cargados.'); return; }
+
+  const PDFLibRef = window.PDFLib;
+  if(!PDFLibRef || !PDFLibRef.PDFDocument) {
+    alert('No se pudo cargar el motor de PDF. Recargá la página (Ctrl+Shift+R) e intentá de nuevo.');
+    return;
+  }
+
+  const ordered = wpqOrderInicialThenReval(files);
+  setSyncStatus('syncing', 'Armando impresión…');
+
+  let merged;
+  const skipped = [];
+  try {
+    merged = await PDFLibRef.PDFDocument.create();
+    for(const meta of ordered) {
+      try {
+        const rec = await idbGet(meta.id);
+        if(!rec || !rec.data) { skipped.push(meta.name); continue; }
+        let bytes = Uint8Array.from(atob(rec.data), c => c.charCodeAt(0));
+
+        const isPdf   = (meta.mimeType === 'application/pdf') || /\.pdf$/i.test(meta.name);
+        const isExcel = /\.(xlsx?|xlsm|xlsb|csv)$/i.test(meta.name) || /excel|spreadsheet|csv/i.test(meta.mimeType||'');
+
+        if(!isPdf && isExcel) {
+          try { bytes = await wpqExcelArrayToPdf(bytes); }
+          catch(e) { console.error('No se pudo convertir Excel:', meta.name, e); skipped.push(meta.name); continue; }
+        } else if(!isPdf) {
+          skipped.push(meta.name); continue;   // imágenes u otros: no combinables
+        }
+
+        const src   = await PDFLibRef.PDFDocument.load(bytes, { ignoreEncryption: true });
+        const pages = await merged.copyPages(src, src.getPageIndices());
+        pages.forEach(p => merged.addPage(p));
+      } catch(e) {
+        console.error('No se pudo agregar al PDF:', meta.name, e);
+        skipped.push(meta.name);
+      }
+    }
+  } catch(e) {
+    setSyncStatus('idle');
+    alert('Error al armar la impresión: ' + e.message);
+    return;
+  }
+
+  if(merged.getPageCount() === 0) {
+    setSyncStatus('idle');
+    alert('No hay archivos PDF imprimibles para este soldador.' +
+      (skipped.length ? ('\n\nOmitidos: ' + skipped.join(', ')) : ''));
+    return;
+  }
+
+  const out  = await merged.save();
+  const blob = new Blob([out], { type: 'application/pdf' });
+  const url  = URL.createObjectURL(blob);
+  const win  = window.open(url, '_blank');
+  if(win) { win.addEventListener('load', () => { try{ win.print(); }catch(e){} }); }
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+
+  setSyncStatus('ok', 'Listo');
+  setTimeout(()=>setSyncStatus('idle'), 1500);
+  if(skipped.length) {
+    setTimeout(() => alert('Se imprimió en orden (inicial → revalidación).\n\n' +
+      'No se pudieron incluir (no son PDF): ' + skipped.join(', ')), 300);
+  }
 }
 
 // Elimina un solo archivo de un soldador
