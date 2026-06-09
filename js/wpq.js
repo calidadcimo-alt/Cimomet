@@ -687,14 +687,31 @@ async function printWPQFile(entryId, fileId) {
   } catch(e) { alert('Error al imprimir: ' + e.message); }
 }
 
-// Ordena los archivos de un soldador: primero la calificación inicial,
-// después las revalidaciones. La revalidación se detecta por el nombre
-// (contiene "revalid"/"revalidación"). Dentro de cada grupo respeta el orden actual.
-function wpqOrderInicialThenReval(files) {
-  const isReval = f => /revalid/i.test((f && f.name) || '');
-  const iniciales = files.filter(f => !isReval(f));
-  const revals    = files.filter(f =>  isReval(f));
-  return [...iniciales, ...revals];
+// Ordena los archivos de un soldador para imprimir:
+//  1) agrupados por POSICIÓN de soldadura (2G, 4G, 6G, 1F…), en orden ascendente
+//  2) dentro de cada posición: primero la calificación inicial, después las revalidaciones
+// La posición se detecta del nombre del archivo (ej. "ALDERETE 3115 2G CAL.INC.").
+// La revalidación se detecta por "revalid"; el resto se considera inicial.
+// Los archivos sin posición detectable van al final, respetando inicial→revalidación.
+function wpqOrderForPrint(files) {
+  const POS = /(?:^|[^\d])(\d)\s?([GF])R?(?![A-Za-z])/i;   // 1G,2G,3G,4G,5G,6G,6GR,1F…
+  const info = (files||[]).map((f, idx) => {
+    const name = (f && f.name) || '';
+    const m = name.match(POS);
+    return {
+      f, idx,
+      posNum: m ? parseInt(m[1], 10) : 99,            // sin posición → al final
+      posLet: m ? m[2].toUpperCase() : 'Z',
+      cat:    /revalid/i.test(name) ? 1 : 0           // 0 = inicial, 1 = revalidación
+    };
+  });
+  info.sort((a, b) =>
+    (a.posNum - b.posNum) ||
+    a.posLet.localeCompare(b.posLet) ||
+    (a.cat - b.cat) ||
+    (a.idx - b.idx)                                   // estable: respeta orden de carga
+  );
+  return info.map(x => x.f);
 }
 
 // Imprime TODOS los archivos de un soldador en un solo PDF, en orden
@@ -712,7 +729,7 @@ async function printAllWPQForSoldador(entryId) {
     return;
   }
 
-  const ordered = wpqOrderInicialThenReval(files);
+  const ordered = wpqOrderForPrint(files);
   setSyncStatus('syncing', 'Armando impresión…');
 
   let merged;
