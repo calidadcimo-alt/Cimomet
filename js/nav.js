@@ -16,6 +16,84 @@ function updateHomeButton() {
   }
 }
 
+// ════════════════════════════════════════════════════════════
+// Persistencia de navegación: al recargar (manual o automático)
+// la app vuelve a la pantalla donde estabas, no a Inicio.
+// ════════════════════════════════════════════════════════════
+let _navRestoring = false;   // mientras restauramos, no guardamos estado intermedio
+
+function getNavState() {
+  return {
+    screen: currentScreen,
+    otId:        (typeof currentOT        !== 'undefined') ? currentOT        : null,
+    tab:         (typeof currentTab       !== 'undefined') ? currentTab       : null,
+    procSection: (typeof currentProcSection !== 'undefined') ? currentProcSection : null,
+    wpq: (typeof wpqNav !== 'undefined' && wpqNav)
+           ? { level: wpqNav.level, pst: wpqNav.pst, soldador: wpqNav.soldador }
+           : null
+  };
+}
+
+function saveNavState() {
+  if(_navRestoring) return;
+  try { localStorage.setItem('cimomet_nav', JSON.stringify(getNavState())); } catch(e){}
+}
+
+// Vuelve a dibujar la pantalla actual sin moverte de lugar.
+// La usan tanto el refresco automático (polling) como el post-sync inicial.
+function rerenderCurrentScreen() {
+  switch(currentScreen) {
+    case 'home':     showHome(); break;
+    case 'otlist':   renderOTListScreen(); break;
+    case 'procmenu': showProceduresMenu(); break;
+    case 'procview': if(typeof showProceduresView==='function') showProceduresView(); break;
+    case 'wpq':      if(typeof renderWPQ==='function') renderWPQ(); break;
+    case 'ot':
+      if((typeof currentOT!=='undefined') && currentOT && (db.ots||[]).find(x=>x.id===currentOT)) renderOT();
+      else showOTList();
+      break;
+    default: showHome();
+  }
+}
+
+// Restaura la última pantalla guardada (llamado al arrancar).
+function restoreNavState() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem('cimomet_nav') || 'null'); } catch(e){}
+  if(!s || !s.screen) { showHome(); return; }
+
+  _navRestoring = true;
+  try {
+    if(s.screen === 'otlist')        showOTList();
+    else if(s.screen === 'procmenu') showProceduresMenu();
+    else if(s.screen === 'procview') {
+      if(s.procSection && typeof currentProcSection!=='undefined') currentProcSection = s.procSection;
+      if(typeof showProceduresView==='function') showProceduresView();
+    }
+    else if(s.screen === 'wpq' && typeof showWPQView==='function') {
+      showWPQView();                       // setea screen='wpq' y wpqNav al nivel PST
+      if(s.wpq && s.wpq.pst) {
+        if(s.wpq.level === 'archivos' && (db.wpq||[]).find(e=>e.id===s.wpq.soldador)) {
+          wpqNav = { level:'archivos', pst:s.wpq.pst, soldador:s.wpq.soldador };
+        } else {
+          wpqNav = { level:'soldadores', pst:s.wpq.pst, soldador:null };
+        }
+        renderWPQ();
+      }
+    }
+    else if(s.screen === 'ot') {
+      const o = (db.ots||[]).find(x => x.id === s.otId);
+      if(o) { currentOT = s.otId; currentTab = s.tab || 'datos'; currentScreen = 'ot'; renderOT(); }
+      else showOTList();                   // la OT ya no existe → lista
+    }
+    else showHome();
+  } catch(e) {
+    console.error('[nav] restore falló:', e);
+    showHome();
+  }
+  _navRestoring = false;
+}
+
 // ── Pantalla de inicio ───────────────────────────────────────
 function showHome() {
   currentScreen = 'home';
@@ -46,6 +124,7 @@ function showHome() {
         </div>
       </div>
     </div>`;
+  saveNavState();
 }
 
 // ── Pantalla: lista de OTs (formato tarjetas) ───────────────
@@ -108,6 +187,7 @@ function renderOTListScreen() {
   }).join('');
 
   main.innerHTML = `<div class="fade-in">${sections}</div>`;
+  saveNavState();
 }
 
 // ── Pantalla: menú de procedimientos ─────────────────────────
@@ -145,6 +225,7 @@ function showProceduresMenu() {
       ${menuCard("showWPQView()", '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>', 'WPQ', 'Calificación de soldadores')}
     </div>
   </div>`;
+  saveNavState();
 }
 
 // Compat: algunas funciones viejas llaman renderSidebar(); lo redirigimos

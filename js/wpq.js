@@ -9,16 +9,35 @@ let wpqScrollMemory = {}; // recuerda el scroll por nivel
 
 // ── Sincronización con la nube (tabla wpq) ───────────────────
 
-// Sube un registro WPQ (un soldador para un PST) inmediatamente
+// Sube un registro WPQ (un soldador para un PST) inmediatamente.
+// Antes de guardar, FUSIONA los archivos con los que haya en la nube, así si
+// otra persona agregó archivos al mismo soldador no se pisan (se unen por id).
 async function pushWPQ(entry) {
   if(!syncEnabled || !entry) return;
+  if(typeof _cloudBusy !== 'undefined') _cloudBusy++;
   try {
+    // Traer la versión remota y unir archivos por id (local gana en duplicados)
+    try {
+      const rg = await fetch(SUPA_URL + '/rest/v1/wpq?id=eq.' + encodeURIComponent(entry.id) + '&select=files', {headers: supaHeaders()});
+      if(rg.ok) {
+        const arr = await rg.json();
+        const remoteFiles = (arr && arr[0] && arr[0].files) ? arr[0].files : [];
+        if(remoteFiles.length) {
+          const byId = {};
+          remoteFiles.forEach(f => { if(f && f.id) byId[f.id] = f; });
+          (entry.files || []).forEach(f => { if(f && f.id) byId[f.id] = f; });  // local pisa duplicado
+          entry.files = Object.values(byId);
+        }
+      }
+    } catch(e) { /* si falla la lectura remota, seguimos con lo local */ }
+
+    const now = new Date().toISOString();
     const row = {
       id: entry.id,
       pst: entry.pst,
       soldador: entry.soldador,
       files: entry.files || [],
-      updated_at: new Date().toISOString()
+      updated_at: now
     };
     const r = await fetch(SUPA_URL + '/rest/v1/wpq?on_conflict=id', {
       method: 'POST',
@@ -26,7 +45,9 @@ async function pushWPQ(entry) {
       body: JSON.stringify(row)
     });
     if(!r.ok) console.error('[pushWPQ]', r.status, await r.text());
+    else entry.updatedAt = now;
   } catch(e) { console.error('[pushWPQ]', e); }
+  finally { if(typeof _cloudBusy !== 'undefined') _cloudBusy--; }
 }
 
 // Borra un registro WPQ de la nube
@@ -132,6 +153,7 @@ function renderWPQ() {
     if(actionsEl) actionsEl.innerHTML = '';
     renderWPQarchivosLevel();
   }
+  if(typeof saveNavState==='function') saveNavState();
 }
 
 // ── NIVEL 1: carpetas de PST ─────────────────────────────────
@@ -393,6 +415,7 @@ async function handleWPQFolderUpload(input) {
   if(!input || input.length === 0) return;
   const pst = wpqNav.pst;
   if(!pst) { alert('Abrí primero una carpeta de PST.'); return; }
+  window.wpqUploading = true;   // pausa el refresco automático durante la carga
 
   // Agrupar archivos por soldador. Soporta dos formas de carga:
   //  (A) Carpeta padre de PST que contiene subcarpetas de soldadores:
@@ -412,7 +435,7 @@ async function handleWPQFolderUpload(input) {
     const rel = (item && item.relPath) ? item.relPath : (file.webkitRelativePath || file.name);
     paths.push({ file, parts: rel.split('/').filter(Boolean) });
   }
-  if(paths.length === 0) { setSyncStatus('idle'); return; }
+  if(paths.length === 0) { window.wpqUploading = false; setSyncStatus('idle'); return; }
   // Profundidad: cantidad de segmentos de carpeta (sin contar el archivo)
   const maxDepth = Math.max(...paths.map(p => p.parts.length));
 
@@ -496,6 +519,7 @@ async function handleWPQFolderUpload(input) {
   setSyncStatus('ok', 'Guardado');
   setTimeout(()=>setSyncStatus('idle'), 2000);
   renderWPQ();
+  window.wpqUploading = false;
 
   if(excelOmitidos.length) {
     alert('No se cargaron estos archivos Excel (subí la versión PDF exportada desde Excel):\n\n• ' +

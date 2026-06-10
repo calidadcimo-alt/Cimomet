@@ -8,17 +8,12 @@ function closeModalIf(e,id){if(e.target.id===id)closeModal(id);}
 
 // ── Init ─────────────────────────────────────────────────────
 loadDB();
-showHome();
-// Pull latest from cloud in background, then refresh current screen
+restoreNavState();   // volver a la última pantalla (desde cache local)
+// Traer lo último de la nube; al terminar, re-aplicar la pantalla con datos frescos
+// y arrancar el refresco automático (polling) cada 15 s.
 syncFromCloud().then(ok => {
-  if(!ok) return;
-  if(currentScreen === 'home') showHome();
-  else if(currentScreen === 'otlist') renderOTListScreen();
-  else if(currentScreen === 'procmenu') showProceduresMenu();
-  else if(currentScreen === 'ot' && currentOT) {
-    const o = db.ots.find(x=>x.id===currentOT);
-    if(o) renderOT(); else showOTList();
-  }
+  if(ok && typeof restoreNavState === 'function') restoreNavState();
+  if(typeof startPolling === 'function') startPolling(15000);
 });
 
 // Keyboard shortcut: ESC closes modals

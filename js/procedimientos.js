@@ -134,6 +134,7 @@ function showProceduresView(section) {
     `<button class="btn btn-secondary btn-sm" onclick="showProceduresMenu()">← Procedimientos</button>
      <button class="btn btn-primary btn-sm" onclick="openAddProcModal()">+ Cargar procedimiento</button>`;
   renderProceduresLibrary();
+  if(typeof saveNavState==='function') saveNavState();
 }
 
 // Ordena una lista de procedimientos: los WPS por número de PST, el resto alfabético

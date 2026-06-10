@@ -27,7 +27,27 @@ function setSyncStatus(state, msg) {
 
 async function pushOT(ot) {
   if(!syncEnabled || !ot) return;
+  _cloudBusy++;
   try {
+    // Guard de conflicto: si la nube tiene una versión MÁS NUEVA que la que
+    // cargaste, avisamos y NO pisamos. (fail-open: si no se puede chequear, guarda igual)
+    if(ot.updatedAt) {
+      const remote = await remoteUpdatedAt('ots', ot.id);
+      const tr = remote ? Date.parse(remote) : NaN;
+      const tl = Date.parse(ot.updatedAt);
+      if(isFinite(tr) && isFinite(tl) && tr > tl) {
+        setSyncStatus('error','Conflicto');
+        const recargar = confirm(
+          'La OT "' + (ot.num || ot.id) + '" fue modificada por otra persona mientras la editabas.\n\n' +
+          'Para no pisar ese cambio, esto NO se guardó.\n\n' +
+          'Aceptar = traer la versión de la nube (tendrás que rehacer tu cambio).\n' +
+          'Cancelar = seguir como estás.'
+        );
+        if(recargar) { await syncFromCloud(); if(typeof rerenderCurrentScreen==='function') rerenderCurrentScreen(); }
+        return;
+      }
+    }
+    const now = new Date().toISOString();
     const row = {
       id: ot.id, num: ot.num, cliente: ot.cliente, obra: ot.obra||'',
       plano: ot.plano||'', anio: ot.anio||'', estado: ot.estado||'active', tipo: ot.tipo||'',
@@ -35,14 +55,16 @@ async function pushOT(ot) {
       manual_procs: ot.manualProcs||[], excluded_procs: ot.excludedProcs||[],
       f07s: ot.f07s||[], f07text: ot.f07text||'',
       created_at: ot.createdAt ? new Date(ot.createdAt).toISOString() : new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: now
     };
     const r = await fetch(SUPA_URL + '/rest/v1/ots?on_conflict=id', {
       method:'POST', headers: supaHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),
       body: JSON.stringify(row)
     });
     if(!r.ok) console.error('[pushOT]', r.status, await r.text());
+    else ot.updatedAt = now;   // recordamos la versión que dejamos en la nube
   } catch(e) { console.error('[pushOT]', e); }
+  finally { _cloudBusy--; }
 }
 
 // Map procedure category → Supabase table name
@@ -162,8 +184,10 @@ function syncToCloud(delay) {
 
 // Pull entire db from cloud
 
-async function syncFromCloud() {
-  setSyncStatus('syncing','Sincronizando…');
+async function syncFromCloud(opts) {
+  opts = opts || {};
+  const silent = !!opts.silent;        // polling: no parpadear el estado
+  if(!silent) setSyncStatus('syncing','Sincronizando…');
   try {
     const _wasInitial = !initialSyncDone;
     // Fetch OTs
@@ -195,6 +219,14 @@ async function syncFromCloud() {
     // Fetch library
     const rLib = await fetch(SUPA_URL + '/rest/v1/library?id=eq.main&select=data', {headers: supaHeaders()});   const libRows = rLib.ok ? await rLib.json() : [];
 
+    // Firma de cambios: detecta si algo cambió en la nube desde la última vez
+    // (para que el refresco automático solo re-dibuje cuando hace falta).
+    const sigOf = (rows) => (rows||[]).map(x => (x.id||'') + ':' + (x.updated_at||'')).sort().join('|');
+    const sig = [sigOf(otRows), sigOf(procRows), sigOf(wpqRows), sigOf(vencRows),
+                 'lib:' + ((libRows[0] && JSON.stringify(libRows[0].data||{})) || '')].join('#');
+    _lastCloudChanged = (sig !== _lastCloudSig);
+    _lastCloudSig = sig;
+
     const cloudHasData = otRows.length > 0;
     const localEmpty = !db.ots || db.ots.length === 0;
 
@@ -206,14 +238,16 @@ async function syncFromCloud() {
         items: r.items, customItems: r.custom_items||[],
         manualProcs: r.manual_procs||[], excludedProcs: r.excluded_procs||[],
         f07s: r.f07s||[], f07text: r.f07text||'',
-        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now()
+        createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+        updatedAt: r.updated_at || null
       }));
       db.procedures = procRows.map(r => ({
         id: r.id, name: r.name, type: r.type, fileType: r.file_type,
         filename: r.filename, date: r.date, mimeType: r.mime_type
       }));
       db.wpq = wpqRows.map(r => ({
-        id: r.id, pst: r.pst, soldador: r.soldador, files: r.files || []
+        id: r.id, pst: r.pst, soldador: r.soldador, files: r.files || [],
+        updatedAt: r.updated_at || null
       }));
       db.vencimientos = vencRows.map(r => ({
         id: r.id, soldador: r.soldador, pst: r.pst, posicion: r.posicion,
@@ -236,15 +270,73 @@ async function syncFromCloud() {
       try{ localStorage.setItem('cimomet_db', JSON.stringify(db)); }catch(e){}
     }
     initialSyncDone = true;
-    setSyncStatus('ok','Sincronizado');
-    setTimeout(() => setSyncStatus('idle'), 2500);
+    if(!silent) {
+      setSyncStatus('ok','Sincronizado');
+      setTimeout(() => setSyncStatus('idle'), 2500);
+    }
     return true;
   } catch(e) {
     console.warn('Sync from cloud failed:', e);
     initialSyncDone = true; // allow editing even if cloud unreachable
-    setSyncStatus('error','Sin conexión');
+    if(!silent) setSyncStatus('error','Sin conexión');
     return false;
   }
+}
+
+// ════════════════════════════════════════════════════════════
+// Actualización en vivo (polling) + aviso de conflicto
+// ════════════════════════════════════════════════════════════
+let _lastCloudSig = '';
+let _lastCloudChanged = false;
+let _pollTimer = null;
+
+// ¿Hay algún modal abierto? (para no refrescar y cerrarlo de golpe)
+function isAnyModalOpen() {
+  const nodes = document.querySelectorAll('.modal-overlay, [id^="modal-"]');
+  for(const n of nodes) {
+    try {
+      const st = getComputedStyle(n);
+      if(st && st.display !== 'none' && n.offsetParent !== null) return true;
+    } catch(e) {}
+  }
+  return false;
+}
+
+// Refresco automático: trae la nube y, si algo cambió, re-dibuja la pantalla
+// actual SIN moverte de lugar. Se saltea si no conviene refrescar ahora.
+async function pollSync() {
+  if(typeof syncEnabled !== 'undefined' && !syncEnabled) return;
+  if(document.hidden) return;                       // pestaña en segundo plano
+  if(window.wpqUploading) return;                   // carga de archivos en curso
+  if(typeof _cloudBusy !== 'undefined' && _cloudBusy > 0) return;  // guardando algo
+  if(isAnyModalOpen()) return;                      // hay un modal abierto
+  try {
+    await syncFromCloud({silent:true});
+    if(_lastCloudChanged) {
+      console.log('[POLL] cambios detectados en la nube → refrescando pantalla');
+      if(typeof rerenderCurrentScreen === 'function') rerenderCurrentScreen();
+    }
+  } catch(e) { /* silencioso: no molestar al usuario */ }
+}
+
+function startPolling(ms) {
+  if(_pollTimer) clearInterval(_pollTimer);
+  _pollTimer = setInterval(pollSync, ms || 15000);
+  console.log('[POLL] actualización automática activada cada', (ms||15000)/1000, 's');
+}
+
+// Contador de operaciones de escritura en curso (para que el polling no pise)
+let _cloudBusy = 0;
+
+// Devuelve el updated_at remoto de un registro, o null si no se puede leer.
+async function remoteUpdatedAt(table, id) {
+  try {
+    const r = await fetch(SUPA_URL + '/rest/v1/' + table + '?id=eq.' + encodeURIComponent(id) + '&select=updated_at',
+                          {headers: supaHeaders()});
+    if(!r.ok) return null;
+    const a = await r.json();
+    return (a && a[0] && a[0].updated_at) ? a[0].updated_at : null;
+  } catch(e) { return null; }
 }
 
 // Upload a file blob to Supabase Storage

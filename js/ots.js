@@ -240,6 +240,7 @@ function renderTab(){
   else if(currentTab==='items') renderTabItems(ot,el);
   else if(currentTab==='procedimientos') renderTabProcedimientos(ot,el);
   else if(currentTab==='generar') renderTabGenerar(ot,el);
+  if(typeof saveNavState==='function') saveNavState();
 }
 
 // ── Tab: Datos ───────────────────────────────────────────────────────────────
