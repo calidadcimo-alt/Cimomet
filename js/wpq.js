@@ -1101,10 +1101,13 @@ function _wpqUltimaVence(filas) {
   return u;
 }
 
-// Compara nombres por tokens: coincide si todos los tokens del más corto
-// están en el más largo (ej: "Crous Luciano" ~ "Crous Luciano Nicolas").
+// Compara nombres por tokens, ignorando acentos y ñ (á=a, ñ=n) y mayúsculas.
+// Coincide si todos los tokens del más corto están en el más largo
+// (ej: "Crous Luciano" ~ "Crous Luciano Nicolas"; "ACUÑA" ~ "Acuna").
 function _wpqNombreMatch(a, b) {
-  const norm = s => String(s || '').toLowerCase().replace(/[.,]/g, ' ').split(/\s+/).filter(Boolean);
+  const strip = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                       .toLowerCase().replace(/[.,]/g, ' ');
+  const norm = s => strip(s).split(/\s+/).filter(Boolean);
   const ta = norm(a), tb = norm(b);
   if(!ta.length || !tb.length) return false;
   const [s, l] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
