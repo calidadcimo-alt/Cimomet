@@ -468,6 +468,7 @@ async function handleWPQFolderUpload(input) {
   let totalFiles = 0, doneFiles = 0;
   soldadorNames.forEach(s => totalFiles += bySoldador[s].length);
   const excelOmitidos = [];   // Excel ya no se convierten: se suben PDF directos
+  const revalidadosMsg = [];  // avisos de revalidación automática leída del Excel
 
   for(const soldador of soldadorNames) {
     const files = bySoldador[soldador];
@@ -485,6 +486,12 @@ async function handleWPQFolderUpload(input) {
       // Los Excel NO se convierten en el navegador (no se pueden conservar logo
       // ni firmas). Hay que subir el PDF exportado desde Excel. Se omite y se avisa.
       if(/\.(xlsx?|xlsm|xlsb|csv)$/i.test(lower)) {
+        // Revalidación automática: leer la última "VENCE" del Excel y actualizar
+        // el vencimiento de las posiciones vencidas / por vencer de este soldador.
+        try {
+          const nuevaVenc = await wpqAplicarRevalidacionExcel(entry, file);
+          if(nuevaVenc) revalidadosMsg.push(`${soldador} → vence ${nuevaVenc}`);
+        } catch(e) { console.error('[revalid auto]', e); }
         excelOmitidos.push(file.name);
         doneFiles++;
         setSyncStatus('syncing', `Subiendo ${doneFiles}/${totalFiles}…`);
@@ -520,6 +527,10 @@ async function handleWPQFolderUpload(input) {
   setTimeout(()=>setSyncStatus('idle'), 2000);
   renderWPQ();
   window.wpqUploading = false;
+
+  if(revalidadosMsg.length) {
+    alert('↻ Revalidación automática (leída del Excel):\n\n• ' + revalidadosMsg.join('\n• '));
+  }
 
   if(excelOmitidos.length) {
     alert('No se cargaron estos archivos Excel (subí la versión PDF exportada desde Excel):\n\n• ' +
@@ -1001,6 +1012,67 @@ async function importVencimientosExcel(file) {
 
 // Calcula el estado de vencimiento de un registro ACTIVO respecto a hoy
 // Devuelve: 'vencido' | 'porvencer' | 'vigente' | null (si no aplica)
+// ── Revalidación automática desde el Excel ──────────────────────────
+// Lee la ÚLTIMA fecha de la columna "VENCE" (tabla REVALIDACIONES) de un
+// Excel de revalidación. Devuelve {mes, anio} o null si no la encuentra.
+async function wpqLeerUltimaVence(file) {
+  try {
+    if(typeof XLSX === 'undefined') return null;
+    const buf = await file.arrayBuffer();
+    const wb  = XLSX.read(buf, { type: 'array' });
+    for(const sheetName of wb.SheetNames) {
+      const ws = wb.Sheets[sheetName];
+      if(!ws) continue;
+      const filas = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+      // Ubicar la columna cuyo encabezado dice "VENCE"
+      let colVence = -1, filaHead = -1;
+      for(let r = 0; r < filas.length && colVence < 0; r++) {
+        const fila = filas[r] || [];
+        for(let c = 0; c < fila.length; c++) {
+          if(/^\s*vence\s*$/i.test(String(fila[c] || ''))) { colVence = c; filaHead = r; break; }
+        }
+      }
+      if(colVence < 0) continue;
+      // Bajar por esa columna y quedarnos con la ÚLTIMA fecha válida (M/AA o M/AAAA)
+      let ultima = null;
+      for(let r = filaHead + 1; r < filas.length; r++) {
+        const val = String((filas[r] || [])[colVence] || '').trim();
+        const m = val.match(/^(\d{1,2})\s*[\/\-]\s*(\d{2,4})$/);
+        if(m) {
+          let mes = parseInt(m[1], 10);
+          let anio = parseInt(m[2], 10);
+          if(anio < 100) anio += 2000;
+          if(mes >= 1 && mes <= 12) ultima = { mes, anio };
+        }
+      }
+      if(ultima) return ultima;
+    }
+  } catch(e) { console.error('[revalid excel]', e); }
+  return null;
+}
+
+// Aplica la revalidación leída del Excel SOLO a las posiciones VENCIDAS o
+// que vencen este mes de ese soldador+PST. Devuelve "MM/AAAA" o null.
+async function wpqAplicarRevalidacionExcel(entry, file) {
+  if(!entry) return null;
+  const venc = await wpqLeerUltimaVence(file);
+  if(!venc) return null;
+  const regs = (db.vencimientos || []).filter(v =>
+    v.pst === entry.pst &&
+    (v.soldador || '').toLowerCase() === (entry.soldador || '').toLowerCase());
+  let n = 0;
+  regs.forEach(v => {
+    const e = vencEstado(v);                 // 'vencido' | 'porvencer' | 'vigente' | null
+    if(e === 'vencido' || e === 'porvencer') {
+      v.mes = venc.mes; v.anio = venc.anio; v.estado = 'ACTIVO';
+      pushVencimiento(v);
+      n++;
+    }
+  });
+  if(n > 0) { saveDB(); return String(venc.mes).padStart(2,'0') + '/' + venc.anio; }
+  return null;
+}
+
 function vencEstado(v) {
   if((v.estado||'').toUpperCase() !== 'ACTIVO') return null; // solo ACTIVO importa
   if(!v.mes || !v.anio) return null;
@@ -1032,6 +1104,16 @@ function vencimientosResumen() {
     String(a.soldador||'').localeCompare(String(b.soldador||''));
   vencidos.sort(ordena); porvencer.sort(ordena);
   return { vencidos, porvencer };
+}
+
+// Estado del banner de vencimientos. Arranca SIEMPRE abierto (se resetea al recargar).
+let wpqBannerCollapsed = false;
+
+// Mostrar/ocultar el banner sin re-dibujar toda la vista.
+function toggleVencBanner() {
+  wpqBannerCollapsed = !wpqBannerCollapsed;
+  const slot = document.getElementById('wpq-banner-slot');
+  if(slot) slot.innerHTML = vencimientosBannerHTML();
 }
 
 // HTML del resumen fijo (sticky) de vencimientos
@@ -1067,27 +1149,45 @@ function vencimientosBannerHTML() {
     </div>`;
   }
 
-  let html = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:11px 14px">`;
-  if(vencidos.length) {
-    html += `<div style="margin-bottom:${porvencer.length?'11px':'0'}">
-      <div style="font-size:11px;font-weight:600;color:var(--red);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px;display:flex;align-items:center;gap:6px">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--red)"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
-        Vencidos (${vencidos.length})
-      </div>
-      ${groupByPST(vencidos,'var(--red)','var(--red-light)')}
+  // Encabezado plegable (clickeable)
+  const chevron = `<svg width="14" height="14" viewBox="0 0 24 24" fill="var(--text2)"
+      style="transition:transform .15s;transform:rotate(${wpqBannerCollapsed?-90:0}deg)"><path d="M7 10l5 5 5-5z"/></svg>`;
+  const resumen = [
+    vencidos.length  ? `<span style="color:var(--red);font-weight:600">${vencidos.length} vencidos</span>` : '',
+    porvencer.length ? `<span style="color:var(--amber);font-weight:600">${porvencer.length} por vencer</span>` : ''
+  ].filter(Boolean).join('<span style="color:var(--text2)"> · </span>');
+  const header = `<div onclick="toggleVencBanner()" style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+      ${chevron}
+      <span style="font-size:12px;font-weight:600;color:var(--text)">Vencimientos</span>
+      <span style="font-size:11px">${resumen}</span>
+      <span style="margin-left:auto;font-size:11px;color:var(--text2)">${wpqBannerCollapsed?'Mostrar':'Ocultar'}</span>
     </div>`;
+
+  let body = '';
+  if(!wpqBannerCollapsed) {
+    body = `<div style="margin-top:11px">`;
+    if(vencidos.length) {
+      body += `<div style="margin-bottom:${porvencer.length?'11px':'0'}">
+        <div style="font-size:11px;font-weight:600;color:var(--red);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px;display:flex;align-items:center;gap:6px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--red)"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+          Vencidos (${vencidos.length})
+        </div>
+        ${groupByPST(vencidos,'var(--red)','var(--red-light)')}
+      </div>`;
+    }
+    if(porvencer.length) {
+      body += `<div>
+        <div style="font-size:11px;font-weight:600;color:var(--amber);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px;display:flex;align-items:center;gap:6px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--amber)"><path d="M11 7h2v6h-2zm0 8h2v2h-2zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>
+          Por vencer este mes (${porvencer.length})
+        </div>
+        ${groupByPST(porvencer,'var(--amber)','var(--amber-light)')}
+      </div>`;
+    }
+    body += `</div>`;
   }
-  if(porvencer.length) {
-    html += `<div>
-      <div style="font-size:11px;font-weight:600;color:var(--amber);text-transform:uppercase;letter-spacing:.04em;margin-bottom:7px;display:flex;align-items:center;gap:6px">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--amber)"><path d="M11 7h2v6h-2zm0 8h2v2h-2zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>
-        Por vencer este mes (${porvencer.length})
-      </div>
-      ${groupByPST(porvencer,'var(--amber)','var(--amber-light)')}
-    </div>`;
-  }
-  html += `</div>`;
-  return html;
+
+  return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:11px 14px">${header}${body}</div>`;
 }
 
 // Revalidar desde la vista del soldador: maneja una o varias posiciones del PST
