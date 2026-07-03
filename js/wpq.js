@@ -143,6 +143,7 @@ function renderWPQ() {
   if(wpqNav.level === 'pst') {
     if(actionsEl) actionsEl.innerHTML =
       `<button class="btn btn-secondary btn-sm" onclick="showProceduresMenu()">← Procedimientos</button>
+       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('reval-excel-input').click()">↻ Actualizar revalidaciones</button>
        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('venc-excel-input').click()">📊 Importar vencimientos (Excel)</button>`;
     renderWPQpstLevel();
   } else if(wpqNav.level === 'soldadores') {
@@ -193,6 +194,8 @@ function renderWPQpstLevel() {
     ${cards}
     <input type="file" id="venc-excel-input" accept=".xls,.xlsx" style="display:none"
       onchange="if(this.files[0]) importVencimientosExcel(this.files[0])">
+    <input type="file" id="reval-excel-input" accept=".xls,.xlsx,.xlsm" multiple style="display:none"
+      onchange="if(this.files.length){ wpqImportarRevalidaciones(this.files); this.value=''; }">
   </div>`;
 
   // Banner de vencimientos en el slot fijo (fuera del scroll)
@@ -486,11 +489,11 @@ async function handleWPQFolderUpload(input) {
       // Los Excel NO se convierten en el navegador (no se pueden conservar logo
       // ni firmas). Hay que subir el PDF exportado desde Excel. Se omite y se avisa.
       if(/\.(xlsx?|xlsm|xlsb|csv)$/i.test(lower)) {
-        // Revalidación automática: leer la última "VENCE" del Excel y actualizar
-        // el vencimiento de las posiciones vencidas / por vencer de este soldador.
+        // Revalidación automática: leer PST/posición/nombre y la última "VENCE"
+        // del Excel y actualizar el vencimiento (si está vencido o vence este mes).
         try {
-          const nuevaVenc = await wpqAplicarRevalidacionExcel(entry, file);
-          if(nuevaVenc) revalidadosMsg.push(`${soldador} → vence ${nuevaVenc}`);
+          const rev = await wpqRevalidarDesdeExcel(file);
+          if(rev && rev.status === 'ok') revalidadosMsg.push(`${rev.label} → ${rev.venc}`);
         } catch(e) { console.error('[revalid auto]', e); }
         excelOmitidos.push(file.name);
         doneFiles++;
@@ -1013,64 +1016,136 @@ async function importVencimientosExcel(file) {
 // Calcula el estado de vencimiento de un registro ACTIVO respecto a hoy
 // Devuelve: 'vencido' | 'porvencer' | 'vigente' | null (si no aplica)
 // ── Revalidación automática desde el Excel ──────────────────────────
-// Lee la ÚLTIMA fecha de la columna "VENCE" (tabla REVALIDACIONES) de un
-// Excel de revalidación. Devuelve {mes, anio} o null si no la encuentra.
-async function wpqLeerUltimaVence(file) {
-  try {
-    if(typeof XLSX === 'undefined') return null;
-    const buf = await file.arrayBuffer();
-    const wb  = XLSX.read(buf, { type: 'array' });
-    for(const sheetName of wb.SheetNames) {
-      const ws = wb.Sheets[sheetName];
-      if(!ws) continue;
-      const filas = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
-      // Ubicar la columna cuyo encabezado dice "VENCE"
-      let colVence = -1, filaHead = -1;
-      for(let r = 0; r < filas.length && colVence < 0; r++) {
-        const fila = filas[r] || [];
-        for(let c = 0; c < fila.length; c++) {
-          if(/^\s*vence\s*$/i.test(String(fila[c] || ''))) { colVence = c; filaHead = r; break; }
+// Lee de un Excel de revalidación: PST, posición, nombre y la ÚLTIMA fecha
+// de la columna "VENCE" (tabla REVALIDACIONES). Con eso ubica el registro
+// de vencimiento (por PST + posición + nombre) y, si está VENCIDO o vence
+// este mes, le pone esa fecha. No depende del nombre de la carpeta.
+
+// Devuelve el primer valor no vacío a la derecha de una celda que matchee re.
+function _wpqCellRightOf(filas, re) {
+  for(const fila of filas) {
+    for(let c = 0; c < fila.length; c++) {
+      if(re.test(String(fila[c] || ''))) {
+        for(let k = c + 1; k < fila.length; k++) {
+          const v = String(fila[k] || '').trim();
+          if(v) return v;
         }
       }
-      if(colVence < 0) continue;
-      // Bajar por esa columna y quedarnos con la ÚLTIMA fecha válida (M/AA o M/AAAA)
-      let ultima = null;
-      for(let r = filaHead + 1; r < filas.length; r++) {
-        const val = String((filas[r] || [])[colVence] || '').trim();
-        const m = val.match(/^(\d{1,2})\s*[\/\-]\s*(\d{2,4})$/);
-        if(m) {
-          let mes = parseInt(m[1], 10);
-          let anio = parseInt(m[2], 10);
-          if(anio < 100) anio += 2000;
-          if(mes >= 1 && mes <= 12) ultima = { mes, anio };
-        }
-      }
-      if(ultima) return ultima;
     }
-  } catch(e) { console.error('[revalid excel]', e); }
-  return null;
+  }
+  return '';
 }
 
-// Aplica la revalidación leída del Excel SOLO a las posiciones VENCIDAS o
-// que vencen este mes de ese soldador+PST. Devuelve "MM/AAAA" o null.
-async function wpqAplicarRevalidacionExcel(entry, file) {
-  if(!entry) return null;
-  const venc = await wpqLeerUltimaVence(file);
-  if(!venc) return null;
-  const regs = (db.vencimientos || []).filter(v =>
-    v.pst === entry.pst &&
-    (v.soldador || '').toLowerCase() === (entry.soldador || '').toLowerCase());
-  let n = 0;
-  regs.forEach(v => {
-    const e = vencEstado(v);                 // 'vencido' | 'porvencer' | 'vigente' | null
-    if(e === 'vencido' || e === 'porvencer') {
-      v.mes = venc.mes; v.anio = venc.anio; v.estado = 'ACTIVO';
-      pushVencimiento(v);
-      n++;
+// Última fecha válida (M/AA o M/AAAA) de la columna "VENCE".
+function _wpqUltimaVence(filas) {
+  let col = -1, head = -1;
+  for(let r = 0; r < filas.length && col < 0; r++) {
+    const f = filas[r] || [];
+    for(let c = 0; c < f.length; c++) {
+      if(/^\s*vence\s*$/i.test(String(f[c] || ''))) { col = c; head = r; break; }
     }
-  });
-  if(n > 0) { saveDB(); return String(venc.mes).padStart(2,'0') + '/' + venc.anio; }
-  return null;
+  }
+  if(col < 0) return null;
+  let u = null;
+  for(let r = head + 1; r < filas.length; r++) {
+    const v = String((filas[r] || [])[col] || '').trim();
+    const m = v.match(/^(\d{1,2})\s*[\/\-]\s*(\d{2,4})$/);
+    if(m) { let mes = +m[1], anio = +m[2]; if(anio < 100) anio += 2000; if(mes >= 1 && mes <= 12) u = { mes, anio }; }
+  }
+  return u;
+}
+
+// Compara nombres por tokens: coincide si todos los tokens del más corto
+// están en el más largo (ej: "Crous Luciano" ~ "Crous Luciano Nicolas").
+function _wpqNombreMatch(a, b) {
+  const norm = s => String(s || '').toLowerCase().replace(/[.,]/g, ' ').split(/\s+/).filter(Boolean);
+  const ta = norm(a), tb = norm(b);
+  if(!ta.length || !tb.length) return false;
+  const [s, l] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  return s.every(t => l.includes(t));
+}
+
+// Procesa UN Excel de revalidación.
+// Devuelve {status:'ok'|'novenc'|'nomatch'|'nodata', label, venc}
+async function wpqRevalidarDesdeExcel(file) {
+  const etiqueta = (file && file.name) || 'archivo';
+  try {
+    if(typeof XLSX === 'undefined') return { status:'nodata', label: etiqueta };
+    const buf = await file.arrayBuffer();
+    const wb  = XLSX.read(buf, { type: 'array' });
+    // Elegir la hoja que tenga la tabla REVALIDACIONES (columna VENCE)
+    let filas = null;
+    for(const sn of wb.SheetNames) {
+      const ws = wb.Sheets[sn];
+      if(!ws || !ws['!ref']) continue;
+      const f = XLSX.utils.sheet_to_json(ws, { header:1, raw:false, defval:'' });
+      if(f.some(row => row.some(c => /vence/i.test(String(c||''))))) { filas = f; break; }
+      if(!filas) filas = f;
+    }
+    if(!filas) return { status:'nodata', label: etiqueta };
+
+    const venc = _wpqUltimaVence(filas);
+    if(!venc) return { status:'nodata', label: etiqueta };
+
+    const wps    = _wpqCellRightOf(filas, /proc.*soldadura|^\s*wps\s*$/i);
+    const nombre = _wpqCellRightOf(filas, /nombre del soldador/i);
+    const { pst, pos } = parsePSTposicion(wps);
+    const fechaTxt = String(venc.mes).padStart(2,'0') + '/' + venc.anio;
+    const quien = (nombre || etiqueta) + (pos ? (' · ' + pos) : '') + (pst ? (' (PST ' + pst + ')') : '');
+
+    if(!pst) return { status:'nomatch', label: quien, venc: fechaTxt };
+
+    // Candidatos: mismo PST + misma posición (si la hay) + nombre compatible
+    let regs = (db.vencimientos || []).filter(v =>
+      v.pst === pst &&
+      (!pos || String(v.posicion||'').toUpperCase() === pos) &&
+      (!nombre || _wpqNombreMatch(v.soldador, nombre)));
+    // Si el nombre no cerró pero hay PST+posición únicos, usar eso
+    if(regs.length === 0 && pos) {
+      regs = (db.vencimientos || []).filter(v =>
+        v.pst === pst && String(v.posicion||'').toUpperCase() === pos);
+    }
+    if(regs.length === 0) return { status:'nomatch', label: quien, venc: fechaTxt };
+
+    let n = 0;
+    regs.forEach(v => {
+      const e = vencEstado(v);                 // 'vencido' | 'porvencer' | 'vigente' | null
+      if(e === 'vencido' || e === 'porvencer') {
+        v.mes = venc.mes; v.anio = venc.anio; v.estado = 'ACTIVO';
+        pushVencimiento(v);
+        n++;
+      }
+    });
+    if(n === 0) return { status:'novenc', label: quien, venc: fechaTxt };
+    saveDB();
+    return { status:'ok', label: quien, venc: fechaTxt };
+  } catch(e) {
+    console.error('[revalid excel]', e);
+    return { status:'nodata', label: etiqueta };
+  }
+}
+
+// Importa VARIOS Excel de revalidación de una (botón "Actualizar revalidaciones").
+async function wpqImportarRevalidaciones(fileList) {
+  const files = Array.from(fileList || []).filter(f => f && /\.(xlsx?|xlsm|xlsb)$/i.test(f.name || ''));
+  if(!files.length) return;
+  setSyncStatus('syncing', 'Leyendo revalidaciones…');
+  const okMsg = [], sinVenc = [], sinMatch = [], sinData = [];
+  for(const f of files) {
+    const r = await wpqRevalidarDesdeExcel(f);
+    if(r.status === 'ok')        okMsg.push(`${r.label} → ${r.venc}`);
+    else if(r.status === 'novenc') sinVenc.push(r.label);
+    else if(r.status === 'nomatch') sinMatch.push(r.label);
+    else sinData.push(r.label);
+  }
+  renderWPQ();
+  setSyncStatus('ok', 'Listo'); setTimeout(()=>setSyncStatus('idle'), 2000);
+  let msg = '';
+  if(okMsg.length)    msg += '✓ Actualizados:\n• ' + okMsg.join('\n• ') + '\n\n';
+  if(sinVenc.length)  msg += 'Sin cambios (no estaban vencidos):\n• ' + sinVenc.join('\n• ') + '\n\n';
+  if(sinMatch.length) msg += 'No encontré el registro (revisá nombre/PST/posición):\n• ' + sinMatch.join('\n• ') + '\n\n';
+  if(sinData.length)  msg += 'No pude leer la fecha VENCE de:\n• ' + sinData.join('\n• ') + '\n\n';
+  alert(msg.trim() || 'No se procesó ningún archivo.');
 }
 
 function vencEstado(v) {
