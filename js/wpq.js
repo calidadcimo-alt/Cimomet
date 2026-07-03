@@ -414,6 +414,38 @@ function wpqRestoreScroll(key) {
 
 // ── Carga de carpetas (múltiples soldadores) ─────────────────
 
+// Quita archivos con nombre repetido dentro de un soldador (deja el más nuevo,
+// según el timestamp del id). Borra el blob de los que saca. Devuelve cuántos quitó.
+function wpqDedupeEntryFiles(entry) {
+  if(!entry || !Array.isArray(entry.files)) return 0;
+  const norm = s => String(s||'').trim().toLowerCase();
+  const tsOf = f => { const m = String(f.id||'').match(/wpqf_(\d+)/); return m ? parseInt(m[1],10) : 0; };
+  const byName = {};
+  entry.files.forEach(f => { const k = norm(f.name); (byName[k] = byName[k] || []).push(f); });
+  let removed = 0;
+  const keep = [];
+  Object.values(byName).forEach(group => {
+    if(group.length === 1) { keep.push(group[0]); return; }
+    group.sort((a,b) => tsOf(b) - tsOf(a));   // más nuevo primero
+    keep.push(group[0]);
+    group.slice(1).forEach(f => { if(f.id) idbDelete(f.id).catch(()=>{}); removed++; });
+  });
+  if(removed > 0) entry.files = keep;
+  return removed;
+}
+
+// Limpia duplicados en TODOS los soldadores. Sube a la nube los que cambiaron.
+// Devuelve el total de archivos duplicados borrados.
+function wpqDedupeAll() {
+  let total = 0;
+  (db.wpq||[]).forEach(entry => {
+    const r = wpqDedupeEntryFiles(entry);
+    if(r > 0) { total += r; pushWPQ(entry); }
+  });
+  if(total > 0) saveDB();
+  return total;
+}
+
 async function handleWPQFolderUpload(input) {
   if(!input || input.length === 0) return;
   const pst = wpqNav.pst;
@@ -474,6 +506,10 @@ async function handleWPQFolderUpload(input) {
   const revalidadosMsg = [];  // revalidaciones aplicadas OK
   const revalSinMatch = [];   // revalidaciones que no encontraron registro
 
+  // Limpieza previa: quitar duplicados que ya existan (en todos los soldadores),
+  // así el reemplazo-por-nombre de abajo trabaja sobre un único archivo.
+  const dupsBorrados = wpqDedupeAll();
+
   for(const soldador of soldadorNames) {
     const files = bySoldador[soldador];
     // ¿Ya existe este soldador en este PST? Si sí, le agregamos archivos.
@@ -506,12 +542,21 @@ async function handleWPQFolderUpload(input) {
         const ab = await file.arrayBuffer();
         const bytes = new Uint8Array(ab);
         const mimeType = file.type || (lower.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
-        const fileId = 'wpqf_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
         let b64=''; const CHUNK=8192;
         for(let i=0;i<bytes.length;i+=CHUNK) b64 += String.fromCharCode.apply(null, bytes.subarray(i,i+CHUNK));
         b64 = btoa(b64);
-        await idbSave(fileId, b64, mimeType, file.name);
-        entry.files.push({ id: fileId, name: file.name, mimeType });
+        // Si ya existe un archivo con ese nombre en el soldador, se REEMPLAZA
+        // (mismo id) en vez de duplicarlo.
+        const norm = s => String(s||'').trim().toLowerCase();
+        const prev = entry.files.find(f => norm(f.name) === norm(file.name));
+        if(prev) {
+          await idbSave(prev.id, b64, mimeType, file.name);
+          prev.mimeType = mimeType; prev.name = file.name;
+        } else {
+          const fileId = 'wpqf_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+          await idbSave(fileId, b64, mimeType, file.name);
+          entry.files.push({ id: fileId, name: file.name, mimeType });
+        }
       } catch(e) {
         console.error('Error subiendo', file.name, e);
       }
@@ -526,6 +571,8 @@ async function handleWPQFolderUpload(input) {
     pushWPQ(entry);
   }
 
+  // Limpieza: quitar duplicados ya existentes en todos los soldadores.
+
   saveDB();
   setSyncStatus('ok', 'Guardado');
   setTimeout(()=>setSyncStatus('idle'), 2000);
@@ -534,6 +581,7 @@ async function handleWPQFolderUpload(input) {
 
   let aviso = '';
   if(revalidadosMsg.length) aviso += '✓ Revalidaciones actualizadas:\n• ' + revalidadosMsg.join('\n• ') + '\n\n';
+  if(dupsBorrados > 0)      aviso += `🧹 Se quitaron ${dupsBorrados} archivo(s) duplicado(s).\n\n`;
   if(revalSinMatch.length)  aviso += 'No encontré el registro de vencimiento (revisá nombre / PST / posición):\n• ' + revalSinMatch.join('\n• ') + '\n\n';
   if(excelOmitidos.length)  aviso += 'Estos Excel no se guardan como archivo y no parecen una revalidación (el databook usa el PDF):\n• ' + excelOmitidos.join('\n• ') + '\n\n';
   if(aviso) alert(aviso.trim());
