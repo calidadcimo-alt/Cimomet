@@ -470,8 +470,9 @@ async function handleWPQFolderUpload(input) {
 
   let totalFiles = 0, doneFiles = 0;
   soldadorNames.forEach(s => totalFiles += bySoldador[s].length);
-  const excelOmitidos = [];   // Excel ya no se convierten: se suben PDF directos
-  const revalidadosMsg = [];  // avisos de revalidación automática leída del Excel
+  const excelOmitidos = [];   // Excel que no eran revalidación (no se guardan como archivo)
+  const revalidadosMsg = [];  // revalidaciones aplicadas OK
+  const revalSinMatch = [];   // revalidaciones que no encontraron registro
 
   for(const soldador of soldadorNames) {
     const files = bySoldador[soldador];
@@ -486,16 +487,16 @@ async function handleWPQFolderUpload(input) {
     for(const file of files) {
       const lower = file.name.toLowerCase();
 
-      // Los Excel NO se convierten en el navegador (no se pueden conservar logo
-      // ni firmas). Hay que subir el PDF exportado desde Excel. Se omite y se avisa.
+      // Los Excel no se guardan como archivo (no conservan logo ni firmas). Se usan
+      // para leer la fecha de revalidación; el que se guarda para ver/imprimir es el PDF.
       if(/\.(xlsx?|xlsm|xlsb|csv)$/i.test(lower)) {
-        // Revalidación automática: leer PST/posición/nombre y la última "VENCE"
-        // del Excel y actualizar el vencimiento (si está vencido o vence este mes).
         try {
           const rev = await wpqRevalidarDesdeExcel(file);
-          if(rev && rev.status === 'ok') revalidadosMsg.push(`${rev.label} → ${rev.venc}`);
-        } catch(e) { console.error('[revalid auto]', e); }
-        excelOmitidos.push(file.name);
+          if(rev && rev.status === 'ok')            revalidadosMsg.push(`${rev.label} → ${rev.venc}`);
+          else if(rev && rev.status === 'nomatch')  revalSinMatch.push(rev.label);
+          else if(!rev || rev.status === 'nodata')  excelOmitidos.push(file.name);
+          // 'novenc' (ya vigente): sin ruido
+        } catch(e) { console.error('[revalid auto]', e); excelOmitidos.push(file.name); }
         doneFiles++;
         setSyncStatus('syncing', `Subiendo ${doneFiles}/${totalFiles}…`);
         continue;
@@ -531,14 +532,11 @@ async function handleWPQFolderUpload(input) {
   renderWPQ();
   window.wpqUploading = false;
 
-  if(revalidadosMsg.length) {
-    alert('↻ Revalidación automática (leída del Excel):\n\n• ' + revalidadosMsg.join('\n• '));
-  }
-
-  if(excelOmitidos.length) {
-    alert('No se cargaron estos archivos Excel (subí la versión PDF exportada desde Excel):\n\n• ' +
-      excelOmitidos.join('\n• '));
-  }
+  let aviso = '';
+  if(revalidadosMsg.length) aviso += '✓ Revalidaciones actualizadas:\n• ' + revalidadosMsg.join('\n• ') + '\n\n';
+  if(revalSinMatch.length)  aviso += 'No encontré el registro de vencimiento (revisá nombre / PST / posición):\n• ' + revalSinMatch.join('\n• ') + '\n\n';
+  if(excelOmitidos.length)  aviso += 'Estos Excel no se guardan como archivo y no parecen una revalidación (el databook usa el PDF):\n• ' + excelOmitidos.join('\n• ') + '\n\n';
+  if(aviso) alert(aviso.trim());
 }
 
 // ── Arrastrar y soltar varias carpetas a la vez ──────────────
